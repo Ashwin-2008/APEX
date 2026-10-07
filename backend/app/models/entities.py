@@ -127,3 +127,93 @@ class Recommendation(Base):
     student: Mapped[Student] = relationship(back_populates="recommendations")
     prediction: Mapped[Prediction | None] = relationship(back_populates="recommendations")
     question: Mapped[Question | None] = relationship()
+
+
+class ReviewedProject(Base):
+    __tablename__ = "reviewed_projects"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    repository_path: Mapped[str] = mapped_column(String(1000), unique=True, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(20), nullable=False, default="local")
+    repository_url: Mapped[str | None] = mapped_column(String(1000))
+    branch: Mapped[str | None] = mapped_column(String(200))
+    current_commit_sha: Mapped[str | None] = mapped_column(String(80))
+    monitoring_status: Mapped[str] = mapped_column(String(30), nullable=False, default="paused")
+    last_analyzed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    reviews: Mapped[list["ProjectReview"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+
+
+class ProjectReview(Base):
+    __tablename__ = "project_reviews"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id"), nullable=False)
+    review_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    snapshot: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    metrics: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="completed")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    project: Mapped[ReviewedProject] = relationship(back_populates="reviews")
+    findings: Mapped[list["ProjectFinding"]] = relationship(back_populates="review", cascade="all, delete-orphan")
+    predictions: Mapped[list["ProjectPrediction"]] = relationship(back_populates="review", cascade="all, delete-orphan")
+
+
+class ProjectFinding(Base):
+    __tablename__ = "project_findings"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    review_id: Mapped[int] = mapped_column(ForeignKey("project_reviews.id"), nullable=False)
+    category: Mapped[str] = mapped_column(String(80), nullable=False)
+    severity: Mapped[str] = mapped_column(String(20), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    component: Mapped[str | None] = mapped_column(String(300))
+    file: Mapped[str | None] = mapped_column(String(1000))
+    line: Mapped[int | None] = mapped_column(Integer)
+    evidence: Mapped[str] = mapped_column(Text, nullable=False)
+    analyzer_source: Mapped[str] = mapped_column(String(120), nullable=False)
+    remediation: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="open")
+    fingerprint: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    review: Mapped[ProjectReview] = relationship(back_populates="findings")
+
+
+class ProjectPrediction(Base):
+    __tablename__ = "project_predictions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    review_id: Mapped[int] = mapped_column(ForeignKey("project_reviews.id"), nullable=False)
+    category: Mapped[str] = mapped_column(String(80), nullable=False)
+    probability: Mapped[float] = mapped_column(Float, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    rank: Mapped[int] = mapped_column(Integer, nullable=False)
+    supporting_evidence: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    review: Mapped[ProjectReview] = relationship(back_populates="predictions")
+
+
+class ProjectRequirement(Base):
+    __tablename__ = "project_requirements"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id"), nullable=False)
+    requirement_key: Mapped[str] = mapped_column(String(120), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(120), nullable=False)
+    priority: Mapped[str | None] = mapped_column(String(30))
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    coverage: Mapped[list["RequirementCoverage"]] = relationship(back_populates="requirement", cascade="all, delete-orphan")
+
+
+class RequirementCoverage(Base):
+    __tablename__ = "requirement_coverage"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    requirement_id: Mapped[int] = mapped_column(ForeignKey("project_requirements.id"), nullable=False)
+    review_id: Mapped[int] = mapped_column(ForeignKey("project_reviews.id"), nullable=False)
+    implementation_evidence: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    test_evidence: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    related_findings: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    status: Mapped[str] = mapped_column(String(30), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0)
+    evidence: Mapped[str] = mapped_column(Text, nullable=False)
+    requirement: Mapped[ProjectRequirement] = relationship(back_populates="coverage")

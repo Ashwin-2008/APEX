@@ -3,7 +3,7 @@ import { useStudent } from '../context/StudentContext'
 import { LoadingState } from '../components'
 
 const links = [
-  ['Dashboard', '/dashboard'], ['Practice', '/practice'], ['Progress', '/progress'], ['Mistakes', '/mistakes'], ['Profile', '/profile'],
+  ['Dashboard', '/dashboard'], ['Practice', '/practice'], ['Progress', '/progress'], ['Mistakes', '/mistakes'], ['Profile', '/profile'], ['Project Review', '/project-review'], ['Research Lab', '/project-review/research-lab'],
 ]
 
 export function AppLayout() {

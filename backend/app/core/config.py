@@ -18,6 +18,12 @@ class Settings:
     analytics_trend_threshold: float = max(0.0, float(os.getenv("MISTIQ_ANALYTICS_TREND_THRESHOLD", "0.05")))
     analytics_recovery_window: int = max(1, int(os.getenv("MISTIQ_ANALYTICS_RECOVERY_WINDOW", "3")))
     analytics_mistake_bucket: str = "daily" if os.getenv("MISTIQ_ANALYTICS_MISTAKE_BUCKET", "weekly").lower() == "daily" else "weekly"
+    llm_provider: str = os.getenv("LLM_PROVIDER", "huggingface")
+    hf_token: str = os.getenv("HF_TOKEN", "")
+    hf_model: str = os.getenv("HF_MODEL", "")
+    hf_provider: str = os.getenv("HF_PROVIDER", "")
+    llm_enabled: bool = os.getenv("LLM_ENABLED", "false").lower() in {"1", "true", "yes"}
+    monitor_debounce_seconds: float = max(2.0, min(5.0, float(os.getenv("MONITOR_DEBOUNCE_SECONDS", "3"))))
 
 
 settings = Settings()

@@ -1,0 +1,23 @@
+
+> mistiq-frontend@2.0.0 test
+> vitest run --pool=threads --maxWorkers=1 --minWorkers=1
+
+
+[1m[7m[36m RUN [39m[27m[22m [36mv2.1.9 [39m[90mc:/Users/ASHWIN/Downloads/PROJECTS/MISTIQ/MISTIQ/frontend[39m
+
+[90mstderr[2m | src/test/app.test.tsx[2m > [22m[2mMISTIQ student app[2m > [22m[2mloads the dashboard with progress and recent mistake data
+[22m[39m⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ [32m✓[39m src/test/app.test.tsx [2m([22m[2m16 tests[22m[2m)[22m[33m 3763[2mms[22m[39m
+   [33m[2m✓[22m[39m MISTIQ student app[2m > [22mloads the dashboard with progress and recent mistake data [33m423[2mms[22m[39m
+   [33m[2m✓[22m[39m MISTIQ student app[2m > [22mloads a backend question, submits the answer, and shows checked feedback [33m936[2mms[22m[39m
+   [33m[2m✓[22m[39m MISTIQ student app[2m > [22mshows an incorrect-answer feedback panel without blame [33m340[2mms[22m[39m
+   [33m[2m✓[22m[39m MISTIQ student app[2m > [22mshows model evidence and a database-backed recommended question [33m369[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m1 passed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[32m16 passed[39m[22m[90m (16)[39m
+[2m   Start at [22m 18:59:01
+[2m   Duration [22m 23.33s[2m (transform 2.72s, setup 2.44s, collect 2.86s, tests 3.76s, environment 9.29s, prepare 3.90s)[22m
+
+DONE 

@@ -11,6 +11,8 @@ def test_database_initialization() -> None:
     assert set(Base.metadata.tables) == {
         "students", "questions", "attempts", "mistake_events",
         "learner_states", "predictions", "recommendations",
+        "reviewed_projects", "project_reviews", "project_findings", "project_predictions",
+        "project_requirements", "requirement_coverage",
     }
 
 
