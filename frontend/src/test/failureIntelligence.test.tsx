@@ -129,7 +129,7 @@ describe('MISTIQ-APR failure intelligence panel', () => {
     expect(screen.getByText(/of 2 required — requirement met/)).toBeTruthy()
     expect(screen.getByText(/Distinct review timepoints:/)).toBeTruthy()
     expect(screen.getByText(/The data path stops at the training dataset: 4 of 10 required observations/)).toBeTruthy()
-    expect(screen.queryByText('Most likely next failure categories from the saved MISTIQ-APR artifact:')).toBeNull()
+    expect(screen.queryByText('Most likely next issue:')).toBeNull()
     expect(screen.getByText('Open failures')).toBeTruthy()
     expect(screen.getByText('Resolved failures')).toBeTruthy()
     expect(screen.getByText('Reviews observed')).toBeTruthy()
@@ -140,7 +140,7 @@ describe('MISTIQ-APR failure intelligence panel', () => {
   it('shows STATE C using real artifact predictions and connected evidence', async () => {
     setup({ status: statusOf({ model_status: 'TRAINED', model_available: true, model_detail: 'Artifact valid.', status: 'TRAINED' }), prediction: trainedPrediction })
     expect(await screen.findByText('C · TRAINED MODEL PREDICTION AVAILABLE')).toBeTruthy()
-    expect(screen.getByText('Most likely next failure categories from the saved MISTIQ-APR artifact:')).toBeTruthy()
+    expect(screen.getByText('Most likely next issue:')).toBeTruthy()
     expect(screen.getByText('62.0%')).toBeTruthy()
     expect(screen.getByText('38.0%')).toBeTruthy()
     const modelTraining = screen.getByLabelText('Model training data')
@@ -152,13 +152,13 @@ describe('MISTIQ-APR failure intelligence panel', () => {
     expect(projectHistory.textContent).toContain('Findings in latest review')
     expect(projectHistory.textContent).toContain('Observed categories')
     expect(within(projectHistory).getByText('Testing, Dependency')).toBeTruthy()
-    expect(screen.getByText('Prediction is based on the trained MISTIQ-APR model and the currently observed project state. It is not a certainty or causal estimate.')).toBeTruthy()
+    expect(screen.getByText('Prediction is based on historical project observations and current project state. It is not a certainty or causal estimate.')).toBeTruthy()
     expect(screen.getByText('WHY THIS PREDICTION')).toBeTruthy()
-    expect(screen.getByText(/Top model features: Open Finding Ratio \(increases\)\./)).toBeTruthy()
+    expect(screen.getByText(/Most influential signals: Open Finding Ratio \(increases\)\./)).toBeTruthy()
     expect(screen.getByText('Historical evidence: past reviews recorded Testing, Dependency across 3 persisted reviews.')).toBeTruthy()
     expect(screen.getByText('Current project evidence: 3 reviews · 2 transitions · 2 findings in the latest review.')).toBeTruthy()
     expect(screen.getByText(/Built from persisted reviews only\./)).toBeTruthy()
-    const features = screen.getByText('TECHNICAL FEATURES').closest('details') as HTMLElement
+    const features = screen.getByText('Show technical model features').closest('details') as HTMLElement
     expect(features).toBeTruthy()
     expect(within(features).getByText('Open Finding Ratio: 0.5000')).toBeTruthy()
     expect(within(features).getByText('increases · contribution 0.31')).toBeTruthy()
@@ -179,7 +179,7 @@ describe('MISTIQ-APR failure intelligence panel', () => {
 
   it('renders what, where, when, evidence, and why for every persisted failure', async () => {
     setup()
-    const timeline = (await screen.findByText('Failure history timeline')).closest('.fi-section') as HTMLElement
+    const timeline = (await screen.findByText('FAILURE HISTORY')).closest('.fi-section') as HTMLElement
     expect(timeline).toBeTruthy()
     const summaries = timeline.querySelectorAll('.fi-timeline-item')
     expect(summaries).toHaveLength(2)
@@ -211,13 +211,13 @@ describe('MISTIQ-APR failure intelligence panel', () => {
         message: null,
       },
     })
-    const heading = await screen.findByText('Observed failure transitions')
+    const heading = await screen.findByText('FAILURE PATTERNS')
     const section = heading.closest('.fi-section') as HTMLElement
     expect(section).toBeTruthy()
     expect(section.textContent).toContain('Testing')
     expect(section.textContent).toContain('Dependency')
     expect(section.textContent).toContain('observed 2 times')
-    expect(section.textContent).toContain('do not imply causation')
+    expect(section.textContent).toContain('Patterns show association, not causation')
     expect(section.textContent).toContain('Recurring patterns')
     expect(section.textContent).toContain('testing → dependency → testing')
     expect(section.textContent).toContain('observed 1 time')
@@ -227,16 +227,16 @@ describe('MISTIQ-APR failure intelligence panel', () => {
 
   it('scores Failure DNA evidence from persisted counts only', async () => {
     setup({}, { failureDna: { testing_deficiency: 0.8, security_risk: 0.15 } })
-    const dna = (await screen.findByText('Failure DNA evidence')).closest('.fi-section') as HTMLElement
+    const dna = (await screen.findByText('FAILURE DNA')).closest('.fi-section') as HTMLElement
     expect(dna).toBeTruthy()
     expect(dna.textContent).toContain('Levels are computed from persisted finding counts per category')
     expect(dna.textContent).toContain('Engine ratios are deterministic analyzer output, not probabilities')
-    expect(within(dna).getByText('Testing Deficiency')).toBeTruthy()
+    expect(within(dna).getByText('Testing problems')).toBeTruthy()
     expect(within(dna).getByText('LOW EVIDENCE')).toBeTruthy()
     expect(within(dna).getByText('1 open · 0 resolved')).toBeTruthy()
     expect(within(dna).getByText('1 supporting observation in Testing')).toBeTruthy()
     expect(within(dna).getByText('Engine ratio 0.80 is deterministic analyzer output, not a probability.')).toBeTruthy()
-    expect(within(dna).getByText('Security Risk')).toBeTruthy()
+    expect(within(dna).getByText('Security risk')).toBeTruthy()
     expect(within(dna).getByText('NO EVIDENCE')).toBeTruthy()
     expect(within(dna).getByText('0 open · 0 resolved')).toBeTruthy()
     expect(within(dna).getByText('0 supporting observations in Security')).toBeTruthy()

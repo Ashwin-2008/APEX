@@ -1,29 +1,301 @@
-import { useMemo, useState } from 'react'
-import { connectProject } from '../services/projectReviewApi'
+import { useEffect, useMemo, useState } from 'react'
+import { connectProject, getFailureHistory, stopMonitoring } from '../services/projectReviewApi'
 import { useProjectEvents, type ProjectEvent } from '../hooks/useProjectEvents'
 import { MistiqFailureIntelligence } from '../components/MistiqFailureIntelligence'
-import { applyFindingEvent, dedupeActiveFindings, dedupeRecommendations, findingDisplayKey, findingLocations, recommendationKey, seedFindings, type DedupableFinding } from '../utils/findingDedup'
-import type { FailureEvent, ProjectReview } from '../types/projectReview'
+import { ConnectScreen } from '../components/projectReview/ConnectScreen'
+import { monitoringView, ProjectHeader } from '../components/projectReview/ProjectHeader'
+import { buildHealthCards, HealthCards } from '../components/projectReview/ProjectHealth'
+import { ActivityFeed } from '../components/projectReview/ActivityFeed'
+import { ProblemsSection } from '../components/projectReview/ProblemsSection'
+import { RecentlyFixed, resolvedFromHistory, type ResolvedView } from '../components/projectReview/RecentlyFixed'
+import { RequirementsSection } from '../components/projectReview/RequirementsSection'
+import { RecommendationsSection } from '../components/projectReview/RecommendationsSection'
+import { applyFindingEvent, dedupeActiveFindings, dedupeRecommendations, findingDisplayKey, seedFindings, type DedupableFinding } from '../utils/findingDedup'
+import { appendActivity, categoryNoun, categoryTitle, severityLabel, translateEvent, type ActivityEntry } from '../utils/labels'
+import type { FailureEvent, FailureHistoryRow, ProjectReview } from '../types/projectReview'
 import '../styles/liveProjectReview.css'
 
-const pretty = (value: string) => value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
-function Badge({ value }: { value: string }) { return <span className={`live-badge live-${value.toLowerCase()}`}>{value}</span> }
-function FindingLocation({ finding }: { finding: DedupableFinding }) {
-  const { primary, component, additional } = findingLocations(finding)
-  return <div className="live-loc">
-    <span className="live-loc-primary">{additional.length ? 'Primary location: ' : ''}<code>{primary}</code></span>
-    {component && <span className="live-loc-component">Component: {component}</span>}
-    {additional.length > 0 && <details className="live-loc-more"><summary>Additional evidence: + {additional.length} locations</summary><ul>{additional.map(location => <li key={location}><code>{location}</code></li>)}</ul></details>}
-  </div>
+interface ResolvedPayload {
+  fingerprint?: string
+  category?: string
+  severity?: string
+  component?: string | null
+  file?: string | null
+  resolved_at?: string
+  resolution_evidence?: string | null
+  related_commit?: string | null
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === 'string' && value ? value : null
+}
+
+function OnboardingSteps({ steps, onDismiss }: { steps: Array<{ label: string; done: boolean }>; onDismiss: () => void }) {
+  const allDone = steps.every(step => step.done)
+  return (
+    <section className="pr-onboarding" aria-label="Getting started">
+      <ol aria-label="Getting started steps">
+        {steps.map((step, index) => (
+          <li key={step.label} className={step.done ? 'done' : 'pending'}>
+            <span className="pr-step-index" aria-hidden="true">{step.done ? '✓' : index + 1}</span>
+            <span>STEP {index + 1} {step.label}</span>
+          </li>
+        ))}
+      </ol>
+      {allDone && (
+        <div className="pr-onboarding-done">
+          <p>Your project is now being monitored. Save a file to see MISTIQ-APR analyze the change automatically.</p>
+          <button type="button" className="button" onClick={onDismiss}>Got it</button>
+        </div>
+      )}
+    </section>
+  )
 }
 
 export function LiveProjectReviewPage() {
-  const [source, setSource] = useState<'local' | 'github'>('local'); const [value, setValue] = useState(''); const [projectId, setProjectId] = useState<number>(); const [review, setReview] = useState<ProjectReview>(); const [findings, setFindings] = useState<Record<string, FailureEvent>>({}); const [activity, setActivity] = useState<ProjectEvent[]>([]); const [error, setError] = useState(''); const [connecting, setConnecting] = useState(false); const [refreshToken, setRefreshToken] = useState(0); const [failureDna, setFailureDna] = useState<Record<string, number>>({})
-  const state = useProjectEvents(projectId, event => { setActivity(items => [event, ...items].slice(0, 50)); if (event.type === 'analysis.completed') setRefreshToken(token => token + 1); if (event.type === 'dna.updated' && event.failure_dna && typeof event.failure_dna === 'object') setFailureDna(event.failure_dna as Record<string, number>); const finding = event.finding as FailureEvent | undefined; if (finding) setFindings(items => applyFindingEvent(items, finding, event.type)) })
-  async function connect() { setConnecting(true); setError(''); try { const result = await connectProject(source, value.trim()); setProjectId(result.project_id); setReview(result.analysis); setFailureDna(result.analysis.failure_dna); setFindings(seedFindings(result.analysis.events)); } catch (exception) { setError(exception instanceof Error ? exception.message : 'Project connection failed.') } finally { setConnecting(false) } }
+  const [source, setSource] = useState<'local' | 'github'>('local')
+  const [value, setValue] = useState('')
+  const [connecting, setConnecting] = useState(false)
+  const [error, setError] = useState('')
+
+  const [projectId, setProjectId] = useState<number>()
+  const [review, setReview] = useState<ProjectReview>()
+  const [findings, setFindings] = useState<Record<string, FailureEvent>>({})
+  const [failureDna, setFailureDna] = useState<Record<string, number>>({})
+  const [refreshToken, setRefreshToken] = useState(0)
+
+  const [activity, setActivity] = useState<ActivityEntry[]>([])
+  const [historyIndex, setHistoryIndex] = useState<Map<string, FailureHistoryRow>>(new Map())
+  const [historyResolved, setHistoryResolved] = useState<ResolvedView[]>([])
+  const [sseResolved, setSseResolved] = useState<Map<string, ResolvedView>>(new Map())
+  const [historyError, setHistoryError] = useState('')
+  const [historyLoaded, setHistoryLoaded] = useState(false)
+  const [repositoryPath, setRepositoryPath] = useState('')
+
+  const [branch, setBranch] = useState<string | null>(null)
+  const [commitSha, setCommitSha] = useState<string | null>(null)
+  const [lastChange, setLastChange] = useState<string | null>(null)
+  const [lastChecked, setLastChecked] = useState<string | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysisError, setAnalysisError] = useState('')
+  const [monitoringPaused, setMonitoringPaused] = useState(false)
+  const [stopping, setStopping] = useState(false)
+  const [stopError, setStopError] = useState('')
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false)
+
+  function handleEvent(event: ProjectEvent) {
+    const entry = translateEvent(event, 0)
+    setActivity(previous => appendActivity(previous, entry))
+
+    const nextBranch = readString(event.branch)
+    const nextSha = readString(event.current_commit_sha)
+    if (nextBranch) setBranch(nextBranch)
+    if (nextSha) setCommitSha(nextSha)
+
+    switch (event.type) {
+      case 'project.changed': {
+        const files = Array.isArray(event.files) ? event.files : []
+        if (files.length) setLastChange(String(files[0]))
+        break
+      }
+      case 'analysis.started':
+        setAnalyzing(true)
+        setAnalysisError('')
+        break
+      case 'analysis.completed':
+        setAnalyzing(false)
+        setLastChecked(new Date().toLocaleTimeString())
+        setRefreshToken(token => token + 1)
+        break
+      case 'analysis.failed':
+        setAnalyzing(false)
+        setAnalysisError(readString(event.message) || 'The latest analysis failed while scanning changes.')
+        break
+      case 'requirement.updated':
+        setRefreshToken(token => token + 1)
+        break
+      case 'dna.updated':
+        if (event.failure_dna && typeof event.failure_dna === 'object') {
+          setFailureDna(event.failure_dna as Record<string, number>)
+        }
+        break
+      case 'monitoring.status':
+        setMonitoringPaused(readString(event.status) !== 'active')
+        break
+      case 'finding.resolved': {
+        const payload = event as unknown as ResolvedPayload
+        const fingerprint = String(payload.fingerprint || '')
+        setFindings(previous => {
+          const next = { ...previous }
+          if (fingerprint && next[fingerprint]) {
+            delete next[fingerprint]
+            return next
+          }
+          if (!fingerprint) {
+            for (const key of Object.keys(next)) {
+              const known = next[key] as DedupableFinding
+              if (payload.category && known.category === payload.category
+                && (known.file || '') === (payload.file || '')
+                && (known.component || '') === (payload.component || '')) {
+                delete next[key]
+              }
+            }
+          }
+          return next
+        })
+        const known = fingerprint ? (findings[fingerprint] as DedupableFinding | undefined) : undefined
+        const view: ResolvedView = {
+          key: fingerprint || `${payload.category || ''}|${payload.file || ''}`,
+          title: known ? categoryTitle(known) : (payload.category ? `${categoryNoun(payload.category)} issue` : 'Issue resolved'),
+          location: {
+            file: payload.file ?? known?.file ?? null,
+            line: known?.line ?? null,
+            component: payload.component ?? known?.component ?? null,
+            evidence: known?.evidence ?? '',
+          },
+          severity: severityLabel(payload.severity ?? known?.severity),
+          resolvedAt: payload.resolved_at ?? null,
+          howResolved: payload.resolution_evidence ?? null,
+          relatedCommit: payload.related_commit ?? null,
+        }
+        setSseResolved(previous => new Map(previous).set(view.key, view))
+        break
+      }
+      default: {
+        const finding = event.finding as FailureEvent | undefined
+        if (finding) setFindings(previous => applyFindingEvent(previous, finding as DedupableFinding, event.type))
+      }
+    }
+  }
+
+  const sseState = useProjectEvents(projectId, handleEvent)
+
+  useEffect(() => {
+    if (!projectId) return
+    let cancelled = false
+    getFailureHistory(projectId)
+      .then(result => {
+        if (cancelled) return
+        const index = new Map<string, FailureHistoryRow>()
+        for (const row of result.findings) index.set(findingDisplayKey(row), row)
+        setHistoryIndex(index)
+        setHistoryResolved(resolvedFromHistory(result.findings))
+        setRepositoryPath(result.project?.repository_path || '')
+        setHistoryLoaded(true)
+        setHistoryError('')
+      })
+      .catch(exception => {
+        if (!cancelled) setHistoryError(exception instanceof Error ? exception.message : 'Failure history could not be loaded.')
+      })
+    return () => { cancelled = true }
+  }, [projectId, refreshToken])
+
+  async function connect() {
+    setConnecting(true)
+    setError('')
+    try {
+      const result = await connectProject(source, value.trim())
+      setProjectId(result.project_id)
+      setReview(result.analysis)
+      setFailureDna(result.analysis.failure_dna)
+      setFindings(seedFindings(result.analysis.events))
+      setMonitoringPaused(result.monitoring_status !== 'active')
+      setOnboardingDismissed(false)
+    } catch (exception) {
+      setError(exception instanceof Error ? exception.message : 'Project connection failed.')
+    } finally {
+      setConnecting(false)
+    }
+  }
+
+  async function stop() {
+    if (!projectId) return
+    setStopping(true)
+    setStopError('')
+    try {
+      await stopMonitoring(projectId)
+      setMonitoringPaused(true)
+    } catch (exception) {
+      setStopError(exception instanceof Error ? exception.message : 'Monitoring could not be stopped.')
+    } finally {
+      setStopping(false)
+    }
+  }
+
   const activeFindings = useMemo(() => dedupeActiveFindings(Object.values(findings)), [findings])
   const recommendations = useMemo(() => dedupeRecommendations(activeFindings), [activeFindings])
-  if (!projectId || !review) return <div className="live-connect"><div className="live-connect-copy"><span className="eyebrow">MISTIQ-APR · Engineering intelligence</span><h1>Connect Project</h1><p>Connect once, then let deterministic evidence analysis observe meaningful development changes and update engineering risk continuously.</p></div><section className="card live-connect-card"><div className="live-source-tabs"><button className={source === 'local' ? 'active' : ''} onClick={() => setSource('local')}>Local Project</button><button className={source === 'github' ? 'active' : ''} onClick={() => setSource('github')}>GitHub Repository</button></div><label htmlFor="connect-value">{source === 'local' ? 'Project path' : 'Public repository URL'}</label><input id="connect-value" value={value} onChange={event => setValue(event.target.value)} placeholder={source === 'local' ? 'C:\\projects\\my-app' : 'https://github.com/user/repository'} onKeyDown={event => event.key === 'Enter' && connect()} />{error && <div className="error" role="alert">{error}</div>}<button className="button" disabled={!value.trim() || connecting} onClick={connect}>{connecting ? 'Connecting and analyzing…' : source === 'local' ? 'Connect Project' : 'Connect Repository'}</button><p className="live-note">The evidence engine remains useful with LLM disabled. Monitoring starts after the initial analysis.</p></section></div>
-  return <div className="live-command-center"><header className="live-header"><div><span className="eyebrow">Engineering command center</span><h1>{review.project.path.split(/[\\/]/).filter(Boolean).pop() || 'Connected project'}</h1><p>Source: {source === 'github' ? 'GitHub repository' : 'Local folder'} · {review.project.file_count} files · {review.project.commit_count} commits</p></div><div className="live-monitoring"><span className={`monitor-dot ${state === 'CONNECTED' ? 'on' : ''}`} /> Monitoring: {state === 'STOPPED' ? 'ACTIVE' : state}</div></header><section className="live-health"><Metric label="Risk" value={String(review.summary.open_high_or_critical)} /><Metric label="Security" value={String(activeFindings.filter(item => item.category === 'security').length)} /><Metric label="Testing" value={String(activeFindings.filter(item => item.category === 'testing').length)} /><Metric label="Architecture" value={String(activeFindings.filter(item => item.category === 'architecture').length)} /></section><div className="live-grid"><section className="card"><span className="card-kicker">Active findings</span><h2>Evidence-backed engineering risks</h2>{activeFindings.length ? <div className="live-findings">{activeFindings.map(finding => <article key={findingDisplayKey(finding)}><div><Badge value={finding.status || 'ACTIVE'} /><Badge value={finding.severity} /></div><strong>{pretty(finding.category)}</strong><p>{finding.evidence}</p><FindingLocation finding={finding} /><small className="live-finding-source">{finding.analyzer_source}</small></article>)}</div> : <p className="live-empty">No active findings are currently reported.</p>}</section><section className="card"><span className="card-kicker">Live engineering activity</span><h2>Development activity</h2><div className="activity-feed">{activity.length ? activity.map((event, index) => <div key={`${event.type}-${index}`}><time>{new Date().toLocaleTimeString()}</time><span><strong>{pretty(event.type)}</strong>{event.files && ` · ${String((event.files as string[])[0] || '')}`}</span></div>) : <p className="live-empty">Waiting for a real project change.</p>}</div></section></div><MistiqFailureIntelligence projectId={projectId} source={source} sseState={state} failureDna={failureDna} refreshToken={refreshToken} /><section className="card"><span className="card-kicker">Recommended next work</span><h2>Evidence-driven priorities</h2><ol className="live-recommendations">{recommendations.map(finding => <li key={recommendationKey(finding.remediation)}><strong>{finding.remediation}</strong><small>{pretty(finding.category)} · {finding.severity}</small></li>)}</ol></section></div>
+  const healthCards = useMemo(() => buildHealthCards(activeFindings), [activeFindings])
+  const resolvedViews = useMemo(() => {
+    const merged = new Map<string, ResolvedView>()
+    for (const item of historyResolved) merged.set(item.key, item)
+    for (const [key, item] of sseResolved) merged.set(key, item)
+    return Array.from(merged.values()).sort((a, b) => String(b.resolvedAt || '').localeCompare(String(a.resolvedAt || '')))
+  }, [historyResolved, sseResolved])
+
+  if (!projectId || !review) {
+    return (
+      <ConnectScreen
+        source={source}
+        value={value}
+        connecting={connecting}
+        error={error}
+        onSourceChange={setSource}
+        onValueChange={setValue}
+        onConnect={connect}
+      />
+    )
+  }
+
+  const projectName = review.project.path.split(/[\\/]/).filter(Boolean).pop() || 'Connected project'
+  const pathForMode = (repositoryPath || review.project.path).toLowerCase()
+  const showcase = pathForMode.includes('showcase') || pathForMode.includes('synthetic')
+  const view = monitoringView({ sseState, analyzing, failed: Boolean(analysisError), stopped: monitoringPaused })
+  const onboardingSteps = [
+    { label: 'Connected', done: true },
+    { label: 'Analyzing project', done: Boolean(review) },
+    { label: 'Building engineering profile', done: historyLoaded },
+    { label: 'Monitoring enabled', done: sseState === 'CONNECTED' && !monitoringPaused },
+  ]
+
+  return (
+    <div className="pr-command-center">
+      <span className={`pr-mode ${showcase ? 'showcase' : 'live'}`}>{showcase ? 'SHOWCASE MODE' : 'LIVE MODE'}</span>
+
+      <ProjectHeader
+        projectName={projectName}
+        source={source}
+        branch={branch}
+        commitSha={commitSha}
+        monitoring={view}
+        lastChecked={lastChecked}
+        lastChange={lastChange}
+        monitoringPaused={monitoringPaused}
+        stopping={stopping}
+        onStop={stop}
+      />
+      {(stopError || analysisError || historyError) && (
+        <p className="pr-error" role="alert">{stopError || analysisError || `Failure history unavailable: ${historyError}`}</p>
+      )}
+
+      {!onboardingDismissed && <OnboardingSteps steps={onboardingSteps} onDismiss={() => setOnboardingDismissed(true)} />}
+
+      <HealthCards cards={healthCards} />
+
+      <div className="pr-grid">
+        <ProblemsSection findings={activeFindings} historyIndex={historyIndex} />
+        <ActivityFeed entries={activity} />
+        <RecommendationsSection recommendations={recommendations} />
+        <RequirementsSection projectId={projectId} refreshToken={refreshToken} />
+        <RecentlyFixed items={resolvedViews} />
+      </div>
+
+      <MistiqFailureIntelligence
+        projectId={projectId}
+        source={source}
+        sseState={sseState}
+        failureDna={failureDna}
+        refreshToken={refreshToken}
+      />
+    </div>
+  )
 }
-function Metric({ label, value }: { label: string; value: string }) { return <div><span>{label}</span><strong>{value}</strong></div> }

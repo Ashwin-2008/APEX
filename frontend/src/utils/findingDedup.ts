@@ -2,11 +2,24 @@ import type { FailureEvent } from '../types/projectReview'
 
 export type DedupableFinding = FailureEvent & { fingerprint?: string }
 
+export interface DisplayKeySource {
+  category?: string | null
+  component?: string | null
+  file?: string | null
+  line?: number | null
+  analyzer_source?: string | null
+  evidence?: string | null
+}
+
 const FINGERPRINT_FIELDS = ['category', 'component', 'file', 'line', 'analyzer_source', 'evidence'] as const
 
-export function findingDisplayKey(finding: DedupableFinding): string {
+export function findingDisplayKey(finding: DisplayKeySource): string {
   const record = finding as unknown as Record<string, unknown>
-  return FINGERPRINT_FIELDS.map(field => String(record[field] ?? '').trim().toLowerCase()).join('|')
+  return FINGERPRINT_FIELDS.map(field => {
+    const value = record[field]
+    const normalized = value === null || value === undefined ? '' : String(value)
+    return normalized.trim().toLowerCase()
+  }).join('|')
 }
 
 export function recommendationKey(remediation: string): string {
@@ -56,14 +69,22 @@ export function dedupeRecommendations(findings: DedupableFinding[]): DedupableFi
 
 const EVIDENCE_LOCATION = /[\w./\\-]+\.[A-Za-z0-9]+:\d+/g
 
+export interface LocationSource {
+  file?: string | null
+  line?: number | null
+  component?: string | null
+  evidence?: string | null
+}
+
 export interface FindingLocations {
   primary: string
   component: string | null
   additional: string[]
 }
 
-export function findingLocations(finding: DedupableFinding): FindingLocations {
-  const fromEvidence = Array.from(new Set(finding.evidence.match(EVIDENCE_LOCATION) ?? []))
+export function findingLocations(finding: LocationSource): FindingLocations {
+  const evidence = String(finding.evidence || '')
+  const fromEvidence = Array.from(new Set(evidence.match(EVIDENCE_LOCATION) ?? []))
   const fromFile = finding.file ? `${finding.file}${finding.line ? `:${finding.line}` : ''}` : null
   const primary = fromFile || fromEvidence[0] || finding.component || 'Project scope'
   const additional = (fromFile ? fromEvidence : fromEvidence.slice(1)).filter(location => location !== primary)

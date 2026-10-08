@@ -26,6 +26,12 @@ describe('findingDisplayKey', () => {
     expect(findingDisplayKey(seeded)).toBe(findingDisplayKey(delivered))
   })
 
+  it('treats missing and null location fields as the same empty material slots (matching backend fingerprint_event)', () => {
+    const analysisEvent = { ...eventOf(), component: undefined, file: undefined, line: undefined }
+    const persistedFinding = { ...eventOf(), component: null, file: null, line: null }
+    expect(findingDisplayKey(analysisEvent)).toBe(findingDisplayKey(persistedFinding))
+  })
+
   it('ignores case and surrounding whitespace in the material', () => {
     expect(findingDisplayKey(eventOf({ category: 'SecuriTY' }))).toBe(findingDisplayKey(eventOf({ category: 'security' })))
     expect(findingDisplayKey(eventOf({ evidence: '  Secret at src/auth.py:12, src/legacy.py:88  ' }))).toBe(findingDisplayKey(eventOf()))

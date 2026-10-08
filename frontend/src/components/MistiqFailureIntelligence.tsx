@@ -2,8 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { getFailureHistory, getResearchPrediction, getResearchStatus, getTrajectory } from '../services/projectReviewApi'
 import type { FailureHistoryResponse, FailureHistoryRow, ResearchPrediction, ResearchStatus, TrajectoryResponse } from '../types/projectReview'
 import type { EventConnectionState } from '../hooks/useProjectEvents'
+import { dimensionLabel } from '../utils/labels'
 
 type PredictionState = 'A' | 'B' | 'C' | 'D' | 'E'
+
+const PREDICTION_INTRO = 'MISTIQ learns from how engineering problems appear and change across project reviews to identify recurring patterns and estimate what type of problem may appear next.'
+const PREDICTION_CONTEXT = 'Prediction is based on historical project observations and current project state. It is not a certainty or causal estimate.'
+const NO_HISTORY_YET = 'MISTIQ needs more project history before it can estimate the next failure category.'
 
 interface MistiqFailureIntelligenceProps {
   projectId: number
@@ -153,7 +158,7 @@ function PredictionOutput({ prediction }: { prediction: ResearchPrediction }) {
   const topFeatures = features.slice(0, 3)
   return (
     <div className="fi-prediction-output">
-      <p className="fi-meta">Most likely next failure categories from the saved MISTIQ-APR artifact:</p>
+      <p className="fi-meta">Most likely next issue:</p>
       <div className="fi-prediction-list">
         {(prediction.predictions || []).map(item => (
           <div className="fi-prediction-row" key={item.category}>
@@ -165,11 +170,11 @@ function PredictionOutput({ prediction }: { prediction: ResearchPrediction }) {
       <section className="fi-why" aria-label="Why this prediction">
         <h4>WHY THIS PREDICTION</h4>
         <ul>
-          <li>{predicted
-            ? `${pretty(predicted)} is the top predicted category from the saved model.${topFeatures.length ? ` Top model features: ${topFeatures.map(feature => `${pretty(feature.feature)} (${feature.direction})`).join(', ')}.` : ''}`
-            : 'No predicted category was returned by the saved model.'}</li>
           <li>Historical evidence: {observed.length ? `past reviews recorded ${observed.map(pretty).join(', ')}` : 'no categories recorded'}{typeof reviewCount === 'number' ? ` across ${reviewCount} persisted reviews` : ''}.</li>
           <li>Current project evidence: {typeof reviewCount === 'number' ? `${reviewCount} reviews` : 'review count not available'}{typeof transitionCount === 'number' ? ` · ${transitionCount} transitions` : ''}{typeof latestFindings === 'number' ? ` · ${latestFindings} findings in the latest review` : ''}.</li>
+          <li>Most influential signals: {topFeatures.length
+            ? `${topFeatures.map(feature => `${pretty(feature.feature)} (${feature.direction})`).join(', ')}.`
+            : 'no supporting features were returned by the saved model.'}{predicted ? ` ${pretty(predicted)} is the top predicted category.` : ''}</li>
         </ul>
       </section>
       <div className="fi-context-grid">
@@ -191,10 +196,10 @@ function PredictionOutput({ prediction }: { prediction: ResearchPrediction }) {
           </dl>
         </section>
       </div>
-      <p className="fi-prediction-context">Prediction is based on the trained MISTIQ-APR model and the currently observed project state. It is not a certainty or causal estimate.</p>
+      <p className="fi-prediction-context">{PREDICTION_CONTEXT}</p>
       {features.length > 0 && (
         <details className="fi-features">
-          <summary>TECHNICAL FEATURES</summary>
+          <summary>Show technical model features</summary>
           <ul>
             {features.map(feature => (
               <li key={feature.feature}>
@@ -289,8 +294,9 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
   if (!history && !errors.history) {
     return (
       <section className="card fi-card" aria-label="MISTIQ-APR Failure Intelligence">
-        <span className="card-kicker">MISTIQ-APR · Failure Intelligence</span>
-        <h2>What failed, where, when, and what the model knows</h2>
+        <span className="card-kicker">MISTIQ-APR</span>
+        <h2>Failure Intelligence</h2>
+        <p className="fi-intro">{PREDICTION_INTRO}</p>
         <p className="live-empty">Loading persisted failure history…</p>
       </section>
     )
@@ -300,8 +306,9 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
     <section className="card fi-card" aria-label="MISTIQ-APR Failure Intelligence">
       <header className="fi-header">
         <div>
-          <span className="card-kicker">MISTIQ-APR · Failure Intelligence</span>
-          <h2>What failed, where, when, and what the model knows</h2>
+          <span className="card-kicker">MISTIQ-APR</span>
+          <h2>Failure Intelligence</h2>
+          <p className="fi-intro">{PREDICTION_INTRO}</p>
         </div>
         <div className="fi-badges">
           <span className={`fi-mode ${synthetic ? 'synthetic' : 'live'}`}>{synthetic ? 'SHOWCASE · SYNTHETIC DATA' : 'LIVE · ANALYZED REPOSITORY'}</span>
@@ -353,7 +360,7 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
       </div>
 
       <div className="fi-section">
-        <h3>Failure history timeline <span className="fi-note">chronological · persisted reviews</span></h3>
+        <h3>FAILURE HISTORY <span className="fi-note">chronological · persisted reviews</span></h3>
         {errors.history ? (
           <div className="fi-error" role="alert"><strong>Failure history unavailable</strong><p>{errors.history}</p></div>
         ) : findings.length ? (
@@ -366,7 +373,7 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
       </div>
 
       <div className="fi-section">
-        <h3>Observed failure transitions</h3>
+        <h3>FAILURE PATTERNS</h3>
         {errors.trajectory ? (
           <div className="fi-error" role="alert"><strong>Transition data unavailable</strong><p>{errors.trajectory}</p></div>
         ) : (
@@ -375,6 +382,7 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
               <div className="fi-transitions">
                 {trajectory.transitions.map((edge, index) => (
                   <div key={`${edge.from}-${edge.to}-${index}`}>
+                    <small className="fi-transition-kind">Observed historical pattern</small>
                     <strong>{pretty(edge.from)}</strong><b>→</b><strong>{pretty(edge.to)}</strong>
                     <span>observed {edge.count} time{edge.count === 1 ? '' : 's'}</span>
                   </div>
@@ -383,7 +391,7 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
             ) : (
               <p className="live-empty">{trajectory?.message || 'Insufficient historical evidence for transition analysis.'}</p>
             )}
-            <p className="fi-disclaimer">Observed failure transitions come from persisted review sequences. They describe what was recorded, and do not imply causation.</p>
+            <p className="fi-disclaimer">Observed failure transitions come from persisted review sequences. Patterns show association, not causation.</p>
             {trajectory?.loops.length ? (
               <div className="fi-loops">
                 <h4>Recurring patterns</h4>
@@ -405,7 +413,7 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
       </div>
 
       <div className="fi-section">
-        <h3>Failure DNA evidence</h3>
+        <h3>FAILURE DNA</h3>
         <p className="fi-note">Levels are computed from persisted finding counts per category. Engine ratios are deterministic analyzer output, not probabilities. No percentages are invented: exact counts are shown next to every level.</p>
         <div className="fi-dna">
           {Object.entries(failureDna).map(([dimension, engineRatio]) => {
@@ -417,7 +425,7 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
             return (
               <div className={`fi-dna-row${empty ? ' fi-dna-row-empty' : ''}`} key={dimension}>
                 <div className="fi-dna-head">
-                  <span>{pretty(dimension)}</span>
+                  <span>{dimensionLabel(dimension)}</span>
                   <b className={`fi-level fi-level-${level.key}`}>{level.label}</b>
                 </div>
                 <div className="fi-dna-meter" aria-hidden="true">
@@ -425,6 +433,7 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
                 </div>
                 <small className="fi-dna-counts">{counts.open} open · {counts.resolved} resolved</small>
                 <small className="fi-dna-observations">{total} supporting observation{total === 1 ? '' : 's'} in {pretty(category)}</small>
+                {empty && <small className="fi-dna-empty-note">No evidence currently supports this risk dimension.</small>}
                 {(total > 0 || engineRatio > 0) && <small className="fi-dna-ratio">Engine ratio {engineRatio.toFixed(2)} is deterministic analyzer output, not a probability.</small>}
               </div>
             )
@@ -433,7 +442,7 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
       </div>
 
       <div className={`fi-section fi-prediction-card fi-state-${state.toLowerCase()}`}>
-        <h3>Next-failure prediction <span className={`fi-state-badge fi-state-badge-${state.toLowerCase()}`}>{STATE_LABEL[state]}</span></h3>
+        <h3>NEXT FAILURE PREDICTION <span className={`fi-state-badge fi-state-badge-${state.toLowerCase()}`}>{STATE_LABEL[state]}</span></h3>
 
         {state === 'E' && (
           <div className="fi-error" role="alert">
@@ -450,6 +459,7 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
         {state === 'A' && (
           <>
             <p className="fi-state-message">No failure has been persisted for this project yet. This is an observation state, not a training-data state: there is no failure evidence recorded, so there is nothing to predict from.</p>
+            <p className="fi-state-message">{NO_HISTORY_YET}</p>
             {researchStatus && <p className="fi-meta">MISTIQ-APR model: {researchStatus.model_status}{researchStatus.model_detail ? ` — ${researchStatus.model_detail}` : ''} · dataset {researchStatus.status}</p>}
             {prediction?.available && <PredictionOutput prediction={prediction} />}
             {!prediction?.available && prediction?.reason && <p className="fi-meta">Prediction for this project: {prediction.reason}</p>}
@@ -467,7 +477,9 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
 
         {state === 'D' && prediction && (
           <>
+            <p className="fi-state-message">Not available yet</p>
             <p className="fi-state-message">A trained MISTIQ-APR artifact exists, but no prediction could be produced for this project.</p>
+            <p className="fi-state-message">{NO_HISTORY_YET}</p>
             <ul className="fi-requirements">
               <li>Reason: <strong>{prediction.reason || 'Not available'}</strong></li>
               <li>{prediction.message || 'No additional detail was returned.'}</li>
