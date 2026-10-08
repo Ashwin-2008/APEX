@@ -3,6 +3,7 @@ import { AppLayout } from './layouts/AppLayout'
 import { DashboardPage, LoginPage, MistakesPage, PracticePage, ProgressPage, ProfilePage, ResearchPage } from './pages/Pages'
 import { ProjectReviewHome } from './pages/ProjectReviewPage'
 import { ResearchLabPage } from './pages/ResearchLabPage'
+import { LiveProjectReviewPage } from './pages/LiveProjectReviewPage'
 
 export default function App() {
   return <Routes>
@@ -17,7 +18,8 @@ export default function App() {
     <Route path="/research" element={<ResearchPage mode="overview" />} />
     <Route path="/research/formula" element={<ResearchPage mode="formula" />} />
     <Route path="/research/evaluation" element={<ResearchPage mode="evaluation" />} />
-    <Route path="/project-review" element={<ProjectReviewHome />} />
+    <Route path="/project-review" element={<LiveProjectReviewPage />} />
+    <Route path="/project-review/report" element={<ProjectReviewHome />} />
     <Route path="/project-review/research-lab" element={<ResearchLabPage />} />
     <Route path="*" element={<Navigate to="/dashboard" replace />} />
   </Route></Routes>

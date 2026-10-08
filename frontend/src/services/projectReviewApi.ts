@@ -1,4 +1,4 @@
-import type { EvolutionReport, ProjectReview, RequirementReport, ResearchDatasetResponse, ResearchEvaluationResponse, ResearchPrediction, ResearchStatus, ReviewComparison, ReviewHistoryItem } from '../types/projectReview'
+import type { EvolutionReport, FailureHistoryResponse, ProjectReview, RequirementReport, ResearchDatasetResponse, ResearchEvaluationResponse, ResearchPrediction, ResearchStatus, ReviewComparison, ReviewHistoryItem, TrajectoryResponse } from '../types/projectReview'
 const baseUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '')
 export async function analyzeProject(projectPath: string): Promise<ProjectReview> {
   const response = await fetch(`${baseUrl}/project-reviews/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_path: projectPath }) })
@@ -17,3 +17,5 @@ export async function getResearchStatus(): Promise<ResearchStatus> { return getR
 export async function getResearchDataset(): Promise<ResearchDatasetResponse> { return getResearch<ResearchDatasetResponse>('research/dataset', 'Unable to load the research dataset.') }
 export async function getResearchEvaluation(): Promise<ResearchEvaluationResponse> { return getResearch<ResearchEvaluationResponse>('research/evaluation', 'Unable to run the research evaluation.') }
 export async function getResearchPrediction(projectId: number): Promise<ResearchPrediction> { return getResearch<ResearchPrediction>(`${projectId}/research-prediction`, 'Unable to load the research prediction.') }
+export async function getFailureHistory(projectId: number): Promise<FailureHistoryResponse> { return getResearch<FailureHistoryResponse>(`${projectId}/failure-history`, 'Unable to load the failure history.') }
+export async function getTrajectory(projectId: number): Promise<TrajectoryResponse> { return getResearch<TrajectoryResponse>(`${projectId}/trajectory`, 'Unable to load observed failure transitions.') }

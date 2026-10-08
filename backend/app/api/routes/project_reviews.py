@@ -5,7 +5,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 
 from app.services.project_review_service import analyze_project
-from app.services.project_review_persistence import compare_reviews, persist_analysis, project_history
+from app.services.project_review_persistence import compare_reviews, failure_history, persist_analysis, project_history
 from app.services.project_evolution_service import evolution, trajectory, requirements, research_observations
 from app.services.mistiq_apr_research_service import (
     research_dataset,
@@ -14,6 +14,7 @@ from app.services.mistiq_apr_research_service import (
     research_status,
 )
 from app.services.project_monitor import event_bus, start_watcher, stop_watcher
+from app.services.git_service import get_current_sha, get_branch, is_git_repository
 from app.models.entities import ReviewedProject
 
 router = APIRouter(prefix="/project-reviews")
@@ -62,21 +63,115 @@ def connect(request: ConnectRequest, app_request: Request):
     if not path or not Path(path).is_dir(): raise HTTPException(422, "A valid local project directory is required.")
     try:
         analysis = analyze_project(path)
+        # Detect Git SHA and branch information
+        git_sha = get_current_sha(path) if is_git_repository(path) else None
+        git_branch = get_branch(path) if is_git_repository(path) else request.branch
+        
         with app_request.app.state.SessionLocal() as session:
-            persisted = persist_analysis(session, analysis); project = session.get(ReviewedProject, persisted["project_id"]); project.source_type = request.source_type; project.repository_url = request.repository_url; project.branch = request.branch; project.monitoring_status = "active"; session.commit()
+            persisted = persist_analysis(session, analysis, related_commit=git_sha)
+            project = session.get(ReviewedProject, persisted["project_id"])
+            project.source_type = request.source_type
+            project.repository_url = request.repository_url
+            project.branch = git_branch
+            project.current_commit_sha = git_sha
+            project.monitoring_status = "active"
+            session.commit()
         project_id = persisted["project_id"]
+        
+        # Emit initial project.changed and analysis events for the first connection
+        initial_files = []
+        initial_analyzers = ["source", "api", "authentication", "testing", "requirements", "coverage", "dependency", "security", "deployment", "configuration"]
+        event_bus.emit(project_id, {"type": "project.changed", "project_id": project_id, "files": initial_files, "analyzers": initial_analyzers, "current_commit_sha": git_sha, "branch": git_branch})
+        event_bus.emit(project_id, {"type": "analysis.started", "project_id": project_id, "files": initial_files, "analyzers": initial_analyzers, "current_commit_sha": git_sha, "branch": git_branch})
+        event_bus.emit(project_id, {"type": "analysis.completed", "project_id": project_id, "review_id": persisted["id"], "review_number": persisted["review_number"], "files": initial_files, "analyzers": initial_analyzers, "current_commit_sha": git_sha, "branch": git_branch})
+        
+        # Emit finding events for initial findings
+        for finding in persisted.get("findings", []):
+            event_bus.emit(project_id, {"type": "finding.created", "project_id": project_id, "finding": finding, "related_commit": git_sha})
+        
+        # Emit requirement, DNA, and prediction events for initial analysis
+        if analysis.get("requirements"):
+            event_bus.emit(project_id, {"type": "requirement.updated", "project_id": project_id, "requirements": analysis.get("requirements", []), "review_id": persisted["id"], "related_commit": git_sha})
+        if analysis.get("failure_dna"):
+            event_bus.emit(project_id, {"type": "dna.updated", "project_id": project_id, "failure_dna": analysis["failure_dna"], "review_id": persisted["id"], "related_commit": git_sha})
+        if analysis.get("next_failure_predictions"):
+            event_bus.emit(project_id, {"type": "prediction.updated", "project_id": project_id, "predictions": analysis["next_failure_predictions"], "review_id": persisted["id"], "related_commit": git_sha})
+        
         def on_change(event):
-            event_bus.emit(project_id, {**event, "type": "analysis.started"})
-            if event.get("type") == "project.changed":
+            event_type = event.get("type")
+            print(f"[E2E] CALLBACK_RECEIVED project={project_id} type={event_type}", flush=True)
+            if event_type == "monitoring.status":
+                event_bus.emit(project_id, event)
+                return
+            # Emit project.changed event first for filesystem/Git changes
+            if event_type == "project.changed":
+                # Extract Git SHA information if available
+                current_commit_sha = event.get("current_commit_sha")
+                previous_commit_sha = event.get("previous_commit_sha")
+                branch = event.get("branch")
+                commit_info = event.get("commit_info")
+                
+                # Emit the project.changed event
+                event_bus.emit(project_id, event)
+                
+                # Update the project's Git SHA in the database if this is a Git transition
+                if current_commit_sha and current_commit_sha != git_sha:
+                    with app_request.app.state.SessionLocal() as session:
+                        project = session.get(ReviewedProject, project_id)
+                        if project:
+                            project.current_commit_sha = current_commit_sha
+                            project.branch = branch
+                            session.commit()
+                
+                # Emit analysis.started
+                print(f"[E2E] ANALYSIS_STARTED project={project_id}", flush=True)
+                event_bus.emit(project_id, {"type": "analysis.started", "project_id": project_id, "files": event.get("files", []), "analyzers": event.get("analyzers", []), "current_commit_sha": current_commit_sha, "previous_commit_sha": previous_commit_sha, "branch": branch})
+                
                 try:
                     updated = analyze_project(path)
+                    print(f"[E2E] ANALYSIS_COMPLETED project={project_id}", flush=True)
+                    # Pass the current commit SHA to the persistence layer
+                    current_sha_for_analysis = current_commit_sha or git_sha
                     with app_request.app.state.SessionLocal() as session:
-                        saved = persist_analysis(session, updated)
-                    event_bus.emit(project_id, {"type": "analysis.completed", "project_id": project_id, "review_id": saved["id"], "review_number": saved["review_number"], "files": event.get("files", []), "analyzers": event.get("analyzers", [])})
+                        print(f"[E2E] PERSISTENCE_STARTED project={project_id}", flush=True)
+                        saved = persist_analysis(session, updated, affected_files=event.get("files", []), affected_analyzers=event.get("analyzers", []), related_commit=current_sha_for_analysis)
+                    print(f"[E2E] REVIEW_PERSISTED project={project_id} review={saved['id']}", flush=True)
+                    
+                    # Emit analysis.completed
+                    event_bus.emit(project_id, {"type": "analysis.completed", "project_id": project_id, "review_id": saved["id"], "review_number": saved["review_number"], "files": event.get("files", []), "analyzers": event.get("analyzers", []), "current_commit_sha": current_commit_sha, "previous_commit_sha": previous_commit_sha})
+                    
+                    # Emit finding events
+                    for finding in saved.get("findings", []): 
+                        finding_status = finding.get("status", "NEW")
+                        if finding_status == "ACTIVE":
+                            print(f"[E2E] FINDING_UPDATED project={project_id} fingerprint={finding.get('fingerprint')}", flush=True)
+                            event_bus.emit(project_id, {"type": "finding.updated", "project_id": project_id, "finding": finding, "related_commit": current_sha_for_analysis})
+                        else:
+                            print(f"[E2E] FINDING_CREATED project={project_id} fingerprint={finding.get('fingerprint')}", flush=True)
+                            event_bus.emit(project_id, {"type": "finding.created", "project_id": project_id, "finding": finding, "related_commit": current_sha_for_analysis})
+                    
+                    # Emit finding.resolved events
+                    for resolved in saved.get("resolved_events", []):
+                        print(f"[E2E] FINDING_UPDATED project={project_id} resolved={resolved.get('finding_id')}", flush=True)
+                        event_bus.emit(project_id, {"type": "finding.resolved", "project_id": project_id, **resolved, "related_commit": current_sha_for_analysis})
+                    
+                    # Emit requirement.updated if requirements changed
+                    if saved.get("requirements"):
+                        event_bus.emit(project_id, {"type": "requirement.updated", "project_id": project_id, "requirements": saved.get("requirements", []), "review_id": saved["id"], "related_commit": current_sha_for_analysis})
+                    
+                    # Emit dna.updated if failure DNA changed
+                    if updated.get("failure_dna"):
+                        event_bus.emit(project_id, {"type": "dna.updated", "project_id": project_id, "failure_dna": updated["failure_dna"], "review_id": saved["id"], "related_commit": current_sha_for_analysis})
+                    
+                    # Emit prediction.updated if predictions changed
+                    if updated.get("next_failure_predictions"):
+                        event_bus.emit(project_id, {"type": "prediction.updated", "project_id": project_id, "predictions": updated["next_failure_predictions"], "review_id": saved["id"], "related_commit": current_sha_for_analysis})
+                    
                 except Exception as error:
+                    print(f"[E2E] ANALYSIS_FAILED project={project_id} error={error}", flush=True)
                     event_bus.emit(project_id, {"type": "analysis.failed", "project_id": project_id, "message": str(error)})
-        start_watcher(project_id, path, on_change)
-        return {"project_id": persisted["project_id"], "review_id": persisted["id"], "review_number": persisted["review_number"], "source_type": request.source_type, "path": path, "monitoring_status": "active", "analysis": analysis}
+        start_watcher(project_id, path, on_change, git_sha)
+        return {"project_id": persisted["project_id"], "review_id": persisted["id"], "review_number": persisted["review_number"], "source_type": request.source_type, "path": path, "monitoring_status": "active", "analysis": analysis, "persisted_review": persisted}
     except ValueError as error: raise HTTPException(422, str(error)) from error
 
 @router.post("/{project_id}/monitoring/stop")
@@ -102,6 +197,15 @@ def history(project_id: int, request: Request):
     try:
         with request.app.state.SessionLocal() as session:
             return project_history(session, project_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{project_id}/failure-history", summary="Aggregate persisted failure findings across reviews")
+def failure_history_report(project_id: int, request: Request):
+    try:
+        with request.app.state.SessionLocal() as session:
+            return failure_history(session, project_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

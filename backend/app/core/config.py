@@ -3,6 +3,33 @@ import json
 from pathlib import Path
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = BACKEND_ROOT.parent
+
+
+def _load_env_file() -> None:
+    """Load the project .env so secrets stay out of source.
+
+    Real environment variables always win over .env values.
+    """
+    env_path = PROJECT_ROOT / ".env"
+    if not env_path.is_file():
+        return
+    try:
+        from dotenv import load_dotenv
+    except ImportError:
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key, value = key.strip(), value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+        return
+    load_dotenv(env_path, override=False)
+
+
+_load_env_file()
 
 
 class Settings:
@@ -22,6 +49,8 @@ class Settings:
     hf_token: str = os.getenv("HF_TOKEN", "")
     hf_model: str = os.getenv("HF_MODEL", "")
     hf_provider: str = os.getenv("HF_PROVIDER", "")
+    groq_api_key: str = os.getenv("GROQ_API_KEY", "")
+    groq_model: str = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
     llm_enabled: bool = os.getenv("LLM_ENABLED", "false").lower() in {"1", "true", "yes"}
     monitor_debounce_seconds: float = max(2.0, min(5.0, float(os.getenv("MONITOR_DEBOUNCE_SECONDS", "3"))))
 

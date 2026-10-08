@@ -12,7 +12,14 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.entities import ProjectFinding, ProjectReview, ReviewedProject
-from .constants import FAILURE_CATEGORIES, PROJECT_REVIEW_DATASET_VERSION
+from .constants import (
+    FAILURE_CATEGORIES,
+    MIN_DISTINCT_CATEGORIES_FOR_EVALUATION,
+    MIN_DISTINCT_TIMEPOINTS_FOR_EVALUATION,
+    MIN_OBSERVATIONS_FOR_EVALUATION,
+    PROJECT_REVIEW_DATASET_VERSION,
+    WALK_FORWARD_MIN_TRAIN_OBSERVATIONS,
+)
 
 
 @dataclass(frozen=True)
@@ -136,9 +143,9 @@ def dataset_status(session: Session) -> dict[str, Any]:
         review.timestamp.isoformat() for review in reviews
     )
     ready = (
-        len(observations) >= 10
-        and len(targets) >= 2
-        and len({(o.project_id, o.review_id) for o in observations}) >= 3
+        len(observations) >= MIN_OBSERVATIONS_FOR_EVALUATION
+        and len(targets) >= MIN_DISTINCT_CATEGORIES_FOR_EVALUATION
+        and len({(o.project_id, o.review_id) for o in observations}) >= MIN_DISTINCT_TIMEPOINTS_FOR_EVALUATION
     )
     return {
         "dataset_version": PROJECT_REVIEW_DATASET_VERSION,
@@ -146,11 +153,18 @@ def dataset_status(session: Session) -> dict[str, Any]:
         "reviews": len(reviews),
         "transitions": sum(max(0, len([r for r in reviews if r.project_id == p]) - 1) for p in projects),
         "training_observations": len(observations),
+        "distinct_timepoints": len({(o.project_id, o.review_id) for o in observations}),
         "failure_categories": len(targets),
         "failure_category_list": targets,
         "date_range": {"first": timestamps[0], "last": timestamps[-1]} if timestamps else None,
         "status": "READY" if ready else "INSUFFICIENT DATA FOR VALID MODEL EVALUATION",
         "message": "Observations are chronological and targets come only from the next persisted review.",
+        "evaluation_requirements": {
+            "min_observations": MIN_OBSERVATIONS_FOR_EVALUATION,
+            "min_distinct_categories": MIN_DISTINCT_CATEGORIES_FOR_EVALUATION,
+            "min_distinct_timepoints": MIN_DISTINCT_TIMEPOINTS_FOR_EVALUATION,
+            "min_walk_forward_train_observations": WALK_FORWARD_MIN_TRAIN_OBSERVATIONS,
+        },
     }
 
 

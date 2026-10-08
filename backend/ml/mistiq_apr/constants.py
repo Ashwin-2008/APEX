@@ -42,6 +42,9 @@ MIN_OBSERVATIONS_FOR_EVALUATION = 10
 # Minimum number of distinct chronological timepoints (source reviews) required.
 MIN_DISTINCT_TIMEPOINTS_FOR_EVALUATION = 3
 
+# Minimum distinct failure categories (targets) required for evaluation.
+MIN_DISTINCT_CATEGORIES_FOR_EVALUATION = 2
+
 # Minimum training observations at any walk-forward cutoff.
 WALK_FORWARD_MIN_TRAIN_OBSERVATIONS = 6
 

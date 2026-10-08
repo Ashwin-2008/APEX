@@ -43,6 +43,7 @@ def migrate_sqlite_schema(database_engine) -> None:
                     connection.execute(text(f'ALTER TABLE "{table}" RENAME COLUMN "{old}" TO "{new}"'))
                     present.remove(old); present.add(new)
         additive = {
+            "project_findings": {"detected_at": "DATETIME", "updated_at": "DATETIME", "resolved_at": "DATETIME", "resolution_evidence": "TEXT", "related_commit": "VARCHAR(80)"},
             "reviewed_projects": {"source_type": "VARCHAR(20) NOT NULL DEFAULT 'local'", "repository_url": "VARCHAR(1000)", "branch": "VARCHAR(200)", "current_commit_sha": "VARCHAR(80)", "monitoring_status": "VARCHAR(30) NOT NULL DEFAULT 'paused'", "last_analyzed_at": "DATETIME"},
             "questions": {"error_mapping": "JSON NOT NULL DEFAULT '{}'"},
             "attempts": {"idempotency_key": "VARCHAR(100)"},
