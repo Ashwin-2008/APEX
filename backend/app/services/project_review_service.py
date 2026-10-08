@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from app.services.project_monitor import IGNORED
+
 FAILURE_CATEGORIES = [
     "requirements", "architecture", "authentication", "authorization",
     "input_validation", "data_integrity", "api_contract", "error_handling",
@@ -41,7 +43,7 @@ def analyze_project(project_path: str) -> dict[str, Any]:
     root = Path(normalized_path).expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"Repository path was not found or is not a directory: {normalized_path}")
-    files = [p for p in root.rglob("*") if p.is_file() and ".git" not in p.parts and "node_modules" not in p.parts and ".venv" not in p.parts]
+    files = [p for p in root.rglob("*") if p.is_file() and not any(part.lower() in IGNORED for part in p.relative_to(root).parts[:-1])]
     by_suffix = Counter(p.suffix.lower() for p in files)
     text_files = [p for p in files if p.suffix.lower() in {".py", ".js", ".jsx", ".ts", ".tsx", ".java", ".go", ".rb", ".php"}]
     contents: dict[Path, str] = {}

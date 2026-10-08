@@ -99,3 +99,25 @@
 .fi-error p,.fi-error li{margin:0;font-size:11px;line-height:1.6}
 .fi-error ul{margin:0;padding-left:18px}
 @media(max-width:850px){.fi-stats{grid-template-columns:repeat(2,1fr)}.fi-timeline-body dl,.fi-evidence-block{grid-template-columns:1fr}.fi-flow{display:grid;grid-template-columns:1fr;gap:26px}.fi-flow li:not(:last-child)::after{content:'\2193';right:auto;left:50%;top:auto;bottom:-21px;transform:translateX(-50%)}.fi-occurrence{margin-left:0}}
+.live-loc{display:grid;gap:4px;margin-top:6px}
+.live-loc-primary{font-size:11px;color:var(--muted)}
+.live-loc-primary code,.live-loc-more code{background:#f4f4f0;border:1px solid var(--line);border-radius:4px;padding:1px 5px;font-size:11px;color:#333}
+.live-loc-component{font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted)}
+.live-loc-more summary{cursor:pointer;color:var(--primary);font-size:11px;font-weight:600}
+.live-loc-more ul{display:grid;gap:4px;margin:6px 0 0;padding-left:4px;list-style:none}
+.live-finding-source{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+.fi-why{display:grid;gap:6px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fff}
+.fi-why h4,.fi-context-block h4{display:inline-block;margin:0 0 6px;padding:2px 8px;border-radius:4px;background:#f2f0e8;color:#5a5648;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.06em}
+.fi-why ul{display:grid;gap:5px;margin:0;padding-left:18px}
+.fi-why li{font-size:12px;line-height:1.6}
+.fi-context-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fi-context-block{display:grid;align-content:start;gap:6px}
+.fi-prediction-context{padding:8px 11px;border-left:3px solid var(--primary);background:#f5f6f2;font-size:11px;line-height:1.6;color:#505549}
+.fi-features li span{font-size:11px;color:#3c3f36}
+.fi-features li small{display:block;color:var(--muted);font-size:10px}
+.fi-dna-row-empty{opacity:.6}
+.fi-dna-row-empty .fi-dna-head span{text-decoration:line-through}
+.fi-dna-row-empty .fi-level{background:#eeeeea;color:#9a9a92}
+.fi-dna-counts,.fi-dna-observations{display:inline-block;color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.03em}
+.fi-dna-ratio{display:block;color:var(--muted);font-size:10px}
+@media(max-width:850px){.fi-context-grid{grid-template-columns:1fr}}

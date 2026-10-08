@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.entities import ProjectFinding, ProjectPrediction, ProjectReview, ReviewedProject, ProjectRequirement, RequirementCoverage
+from app.services.project_monitor import IGNORED
 
 
 def fingerprint_event(event: dict) -> str:
@@ -125,7 +126,8 @@ def _persist_requirements(session: Session, project_id: int, review_id: int, ite
         words = {word.lower() for word in item["title"].split() if len(word) > 4}
         files = []
         try:
-            files = [str(p.relative_to(project_path)) for p in Path(project_path).rglob("*") if p.is_file() and any(word in p.name.lower() for word in words)]
+            root_path = Path(project_path)
+            files = [str(p.relative_to(root_path)) for p in root_path.rglob("*") if p.is_file() and any(word in p.name.lower() for word in words) and not any(part.lower() in IGNORED for part in p.relative_to(root_path).parts[:-1])]
         except OSError:
             pass
         tests = [file for file in files if "test" in file.lower() or "spec" in file.lower()]

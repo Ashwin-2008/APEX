@@ -49,11 +49,11 @@ const DNA_CATEGORY: Record<string, string> = {
   observability_weakness: 'observability',
 }
 
-function evidenceLevel(total: number): { label: string; segments: number } {
-  if (total <= 0) return { label: 'NO EVIDENCE', segments: 0 }
-  if (total <= 2) return { label: 'LOW', segments: 1 }
-  if (total <= 4) return { label: 'MEDIUM', segments: 2 }
-  return { label: 'HIGH', segments: 3 }
+function evidenceLevel(total: number): { key: string; label: string; segments: number } {
+  if (total <= 0) return { key: 'no-evidence', label: 'NO EVIDENCE', segments: 0 }
+  if (total <= 2) return { key: 'low', label: 'LOW EVIDENCE', segments: 3 }
+  if (total <= 4) return { key: 'medium', label: 'MEDIUM EVIDENCE', segments: 6 }
+  return { key: 'high', label: 'HIGH EVIDENCE', segments: 10 }
 }
 
 function Badge({ value }: { value: string }) {
@@ -134,11 +134,23 @@ function RequirementList({ status }: { status: ResearchStatus }) {
   )
 }
 
+function formatFeatureValue(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(4)
+}
+
 function PredictionOutput({ prediction }: { prediction: ResearchPrediction }) {
   const evidence = prediction.historical_evidence as Record<string, unknown> | undefined
   const observed = Array.isArray(evidence?.observed_categories) ? (evidence.observed_categories as string[]) : []
   const model = prediction.model as Record<string, unknown> | undefined
   const training = prediction.training_metadata as Record<string, unknown> | undefined
+  const features = Array.isArray(prediction.supporting_features) ? prediction.supporting_features : []
+  const predicted = prediction.predicted_category || prediction.predictions?.[0]?.category || ''
+  const reviewCount = evidence?.review_count
+  const transitionCount = evidence?.transition_count
+  const latestFindings = evidence?.findings_in_latest_review
+  const trainingObservations = training?.training_observations ?? model?.training_observations
+  const modelName = `${String(model?.name || model?.model || 'MISTIQ-APR')}${model?.version ? ` v${String(model.version)}` : ''}`
+  const topFeatures = features.slice(0, 3)
   return (
     <div className="fi-prediction-output">
       <p className="fi-meta">Most likely next failure categories from the saved MISTIQ-APR artifact:</p>
@@ -150,26 +162,45 @@ function PredictionOutput({ prediction }: { prediction: ResearchPrediction }) {
           </div>
         ))}
       </div>
-      <p className="fi-meta">
-        Model: {String(model?.name || model?.model || 'MISTIQ-APR')}
-        {model?.version ? ` v${String(model.version)}` : ''}
-        {training?.training_observations !== undefined ? ` · trained on ${String(training.training_observations)} observations` : ''}
-      </p>
-      {evidence && (
-        <dl className="fi-evidence-block">
-          <dt>Reviews observed</dt><dd>{String(evidence.review_count ?? 'Not available')}</dd>
-          <dt>Findings in latest review</dt><dd>{String(evidence.findings_in_latest_review ?? 'Not available')}</dd>
-          <dt>Observed categories</dt><dd>{observed.length ? observed.map(pretty).join(', ') : 'None recorded'}</dd>
-          <dt>Transitions observed</dt><dd>{String(evidence.transition_count ?? 'Not available')}</dd>
-          {evidence.note ? (<><dt>Note</dt><dd>{String(evidence.note)}</dd></>) : null}
-        </dl>
-      )}
-      {Array.isArray(prediction.supporting_features) && prediction.supporting_features.length > 0 && (
+      <section className="fi-why" aria-label="Why this prediction">
+        <h4>WHY THIS PREDICTION</h4>
+        <ul>
+          <li>{predicted
+            ? `${pretty(predicted)} is the top predicted category from the saved model.${topFeatures.length ? ` Top model features: ${topFeatures.map(feature => `${pretty(feature.feature)} (${feature.direction})`).join(', ')}.` : ''}`
+            : 'No predicted category was returned by the saved model.'}</li>
+          <li>Historical evidence: {observed.length ? `past reviews recorded ${observed.map(pretty).join(', ')}` : 'no categories recorded'}{typeof reviewCount === 'number' ? ` across ${reviewCount} persisted reviews` : ''}.</li>
+          <li>Current project evidence: {typeof reviewCount === 'number' ? `${reviewCount} reviews` : 'review count not available'}{typeof transitionCount === 'number' ? ` · ${transitionCount} transitions` : ''}{typeof latestFindings === 'number' ? ` · ${latestFindings} findings in the latest review` : ''}.</li>
+        </ul>
+      </section>
+      <div className="fi-context-grid">
+        <section className="fi-context-block" aria-label="Model training data">
+          <h4>MODEL TRAINING DATA</h4>
+          <dl className="fi-evidence-block">
+            <dt>Model:</dt><dd>{modelName}</dd>
+            <dt>Training observations:</dt><dd>{trainingObservations !== undefined ? String(trainingObservations) : 'Not available'}</dd>
+          </dl>
+        </section>
+        <section className="fi-context-block" aria-label="Current project history">
+          <h4>CURRENT PROJECT HISTORY</h4>
+          <dl className="fi-evidence-block">
+            <dt>Current project reviews:</dt><dd>{reviewCount !== undefined ? String(reviewCount) : 'Not available'}</dd>
+            <dt>Current project transitions:</dt><dd>{transitionCount !== undefined ? String(transitionCount) : 'Not available'}</dd>
+            <dt>Findings in latest review:</dt><dd>{latestFindings !== undefined ? String(latestFindings) : 'Not available'}</dd>
+            <dt>Observed categories:</dt><dd>{observed.length ? observed.map(pretty).join(', ') : 'None recorded'}</dd>
+            {evidence?.note ? (<><dt>Note</dt><dd>{String(evidence.note)}</dd></>) : null}
+          </dl>
+        </section>
+      </div>
+      <p className="fi-prediction-context">Prediction is based on the trained MISTIQ-APR model and the currently observed project state. It is not a certainty or causal estimate.</p>
+      {features.length > 0 && (
         <details className="fi-features">
-          <summary>Supporting features</summary>
+          <summary>TECHNICAL FEATURES</summary>
           <ul>
-            {prediction.supporting_features.slice(0, 8).map(feature => (
-              <li key={feature.feature}>{pretty(feature.feature)}: {feature.value.toFixed(4)} ({feature.direction})</li>
+            {features.map(feature => (
+              <li key={feature.feature}>
+                <span>{pretty(feature.feature)}: {formatFeatureValue(feature.value)}</span>
+                <small>{feature.direction} · contribution {feature.contribution}</small>
+              </li>
             ))}
           </ul>
         </details>
@@ -375,25 +406,26 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
 
       <div className="fi-section">
         <h3>Failure DNA evidence</h3>
-        <p className="fi-note">Levels are computed from persisted finding counts per category. No percentages are invented: exact counts are shown next to every level.</p>
+        <p className="fi-note">Levels are computed from persisted finding counts per category. Engine ratios are deterministic analyzer output, not probabilities. No percentages are invented: exact counts are shown next to every level.</p>
         <div className="fi-dna">
           {Object.entries(failureDna).map(([dimension, engineRatio]) => {
             const category = DNA_CATEGORY[dimension] || dimension
             const counts = countsByCategory[category] || { open: 0, resolved: 0 }
-            const level = evidenceLevel(counts.open + counts.resolved)
+            const total = counts.open + counts.resolved
+            const level = evidenceLevel(total)
+            const empty = level.segments === 0
             return (
-              <div className="fi-dna-row" key={dimension}>
+              <div className={`fi-dna-row${empty ? ' fi-dna-row-empty' : ''}`} key={dimension}>
                 <div className="fi-dna-head">
                   <span>{pretty(dimension)}</span>
-                  <b className={`fi-level fi-level-${level.label.toLowerCase().replace(' ', '-')}`}>{level.label}</b>
+                  <b className={`fi-level fi-level-${level.key}`}>{level.label}</b>
                 </div>
                 <div className="fi-dna-meter" aria-hidden="true">
-                  {[0, 1, 2, 3].map(index => <i key={index} className={index < level.segments ? 'on' : ''} />)}
+                  {Array.from({ length: 10 }, (_, index) => <i key={index} className={index < level.segments ? 'on' : ''} />)}
                 </div>
-                <small>
-                  {counts.open} open · {counts.resolved} resolved observations in {pretty(category)}
-                  {typeof engineRatio === 'number' ? ` · engine ratio ${engineRatio.toFixed(2)} (deterministic analyzer output, not a probability)` : ''}
-                </small>
+                <small className="fi-dna-counts">{counts.open} open · {counts.resolved} resolved</small>
+                <small className="fi-dna-observations">{total} supporting observation{total === 1 ? '' : 's'} in {pretty(category)}</small>
+                {(total > 0 || engineRatio > 0) && <small className="fi-dna-ratio">Engine ratio {engineRatio.toFixed(2)} is deterministic analyzer output, not a probability.</small>}
               </div>
             )
           })}
