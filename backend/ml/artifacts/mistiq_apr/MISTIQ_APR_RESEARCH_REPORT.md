@@ -1,6 +1,6 @@
 # MISTIQ-APR Research Report
 
-Generated: 2026-10-08T13:10:31+00:00
+Generated: 2026-10-09T04:33:37+00:00
 
 ## Research question
 Can the trajectory of software engineering failures predict the next project
@@ -10,13 +10,13 @@ failure category better than static project-quality metrics?
 The chronological dataset passed every leakage check and reached the walk-forward threshold; results below are measured, not projected.
 
 ## Dataset status
-- Projects: 171
-- Reviews: 363
-- Transitions: 192
-- Training observations: 618
+- Projects: 184
+- Reviews: 395
+- Transitions: 211
+- Training observations: 665
 - Failure categories observed: 5
-- Date range: 2026-10-06T15:12:54.258164 → 2026-10-08T12:29:24.523333
-- Sample size (observations available for modeling): 618
+- Date range: 2026-10-06T15:12:54.258164 → 2026-10-09T02:28:44.872176
+- Sample size (observations available for modeling): 665
 - Dataset status: READY
 - Dataset version: 1.0.0
 
@@ -29,12 +29,12 @@ Verdict: **PASSED**
 
 | Check | Status | Detail |
 |---|---|---|
-| temporal_leakage | passed | All 618 observations carry feature timestamps at or before their observation time. |
+| temporal_leakage | passed | All 665 observations carry feature timestamps at or before their observation time. |
 | target_leakage | passed | No next-review target review appears in any feature construction. |
-| duplicate_observations | passed | All 618 observations are unique on (project_id, review_id, target). |
-| future_preprocessing_leakage | passed | All 564 fitted preprocessing objects were verified against a train-only refit. |
-| cross_project_leakage | passed | Projects [2, 11, 12, 14, 18, 23, 28, 31, 35, 38, 39, 43, 44, 48, 49, 53, 54, 58, 59, 64, 68, 69, 73, 74, 75, 79, 80, 81, 82, 83, 84, 85, 86, 90, 91, 92, 93, 97, 98, 99, 104, 105, 109, 110, 114, 115, 119, 120, 124, 125, 126, 131, 132, 136, 137, 141, 142, 146, 147, 152, 153, 158, 159, 166, 167] appear in both training and test sets. This is accepted for temporal project prediction because their training observations are strictly earlier than their test observations. |
-- Warning: Projects [2, 11, 12, 14, 18, 23, 28, 31, 35, 38, 39, 43, 44, 48, 49, 53, 54, 58, 59, 64, 68, 69, 73, 74, 75, 79, 80, 81, 82, 83, 84, 85, 86, 90, 91, 92, 93, 97, 98, 99, 104, 105, 109, 110, 114, 115, 119, 120, 124, 125, 126, 131, 132, 136, 137, 141, 142, 146, 147, 152, 153, 158, 159, 166, 167] appear in both training and test sets. This is accepted for temporal project prediction because their training observations are strictly earlier than their test observations.
+| duplicate_observations | passed | All 665 observations are unique on (project_id, review_id, target). |
+| future_preprocessing_leakage | passed | All 621 fitted preprocessing objects were verified against a train-only refit. |
+| cross_project_leakage | passed | Projects [2, 11, 12, 14, 18, 23, 28, 31, 35, 38, 39, 43, 44, 48, 49, 53, 54, 58, 59, 64, 68, 69, 73, 74, 75, 79, 80, 81, 82, 83, 84, 85, 86, 90, 91, 92, 93, 97, 98, 99, 104, 105, 109, 110, 114, 115, 119, 120, 124, 125, 126, 131, 132, 136, 137, 141, 142, 146, 147, 152, 153, 158, 159, 166, 167, 172, 173, 179, 180] appear in both training and test sets. This is accepted for temporal project prediction because their training observations are strictly earlier than their test observations. |
+- Warning: Projects [2, 11, 12, 14, 18, 23, 28, 31, 35, 38, 39, 43, 44, 48, 49, 53, 54, 58, 59, 64, 68, 69, 73, 74, 75, 79, 80, 81, 82, 83, 84, 85, 86, 90, 91, 92, 93, 97, 98, 99, 104, 105, 109, 110, 114, 115, 119, 120, 124, 125, 126, 131, 132, 136, 137, 141, 142, 146, 147, 152, 153, 158, 159, 166, 167, 172, 173, 179, 180] appear in both training and test sets. This is accepted for temporal project prediction because their training observations are strictly earlier than their test observations.
 
 ## Baseline comparison
 
@@ -42,26 +42,26 @@ Pooled across all valid walk-forward cutoffs (accuracy / macro F1 / top-3 accura
 
 | Model | Accuracy | Macro F1 | Top-3 | Status |
 |---|---:|---:|---:|---|
-| Majority Class | 0.2874 | 0.1512 | 0.7159 | EVALUATED |
-| Latest Failure | 0.3087 | 0.1315 | 0.7126 | EVALUATED |
-| Static Logistic Regression | 0.3054 | 0.2187 | 0.8851 | EVALUATED |
-| Random Forest | 0.3021 | 0.2200 | 0.8801 | EVALUATED |
-| MISTIQ-APR | 0.3087 | 0.2437 | 0.8867 | EVALUATED |
+| Majority Class | 0.2866 | 0.1528 | 0.7195 | EVALUATED |
+| Latest Failure | 0.3155 | 0.1472 | 0.7165 | EVALUATED |
+| Static Logistic Regression | 0.3125 | 0.2319 | 0.8872 | EVALUATED |
+| Random Forest | 0.3095 | 0.2230 | 0.8826 | EVALUATED |
+| MISTIQ-APR | 0.3155 | 0.2512 | 0.8887 | EVALUATED |
 
 ## MISTIQ-APR results
 
 Walk-forward status: VALID EVALUATION AVAILABLE
-- Cutoffs: 188
-- Accuracy: 0.3087
-- Macro F1: 0.2437
-- Macro precision: 0.2511
-- Macro recall: 0.2484
-- Top-3 accuracy: 0.8867
-- Log loss: 1.2309
+- Cutoffs: 207
+- Accuracy: 0.3155
+- Macro F1: 0.2512
+- Macro precision: 0.2611
+- Macro recall: 0.2550
+- Top-3 accuracy: 0.8887
+- Log loss: 1.2163
 
 ## Walk-forward results
 
-188 walk-forward cutoffs over 618 chronological observations; training windows expand forward and are never shuffled.
+207 walk-forward cutoffs over 665 chronological observations; training windows expand forward and are never shuffled.
 
 | Cutoff | Train size | Test size | Train time range | Test time range | MISTIQ-APR macro F1 |
 |---:|---:|---:|---|---|---:|
@@ -251,49 +251,68 @@ Walk-forward status: VALID EVALUATION AVAILABLE
 | 184 | 609 | 3 | 2026-10-06T15:12:54.258164 → 2026-10-08T11:49:35.453058 | 2026-10-08T11:49:44.559719 → 2026-10-08T11:49:44.559719 | 0.1000 |
 | 185 | 612 | 3 | 2026-10-06T15:12:54.258164 → 2026-10-08T11:49:44.559719 | 2026-10-08T11:49:53.812678 → 2026-10-08T11:49:53.812678 | 0.1000 |
 | 186 | 615 | 1 | 2026-10-06T15:12:54.258164 → 2026-10-08T11:49:53.812678 | 2026-10-08T12:00:59.168462 → 2026-10-08T12:00:59.168462 | 0.2000 |
-| 187 | 616 | 1 | 2026-10-06T15:12:54.258164 → 2026-10-08T12:00:59.168462 | 2026-10-08T12:14:40.212359 → 2026-10-08T12:14:40.212359 | 0.2000 |
-| 188 | 617 | 1 | 2026-10-06T15:12:54.258164 → 2026-10-08T12:14:40.212359 | 2026-10-08T12:29:24.523333 → 2026-10-08T12:29:24.523333 | 0.2000 |
+| 187 | 616 | 2 | 2026-10-06T15:12:54.258164 → 2026-10-08T12:00:59.168462 | 2026-10-08T12:14:05.743043 → 2026-10-08T12:14:05.743043 | 0.1333 |
+| 188 | 618 | 1 | 2026-10-06T15:12:54.258164 → 2026-10-08T12:14:05.743043 | 2026-10-08T12:14:40.212359 → 2026-10-08T12:14:40.212359 | 0.2000 |
+| 189 | 619 | 1 | 2026-10-06T15:12:54.258164 → 2026-10-08T12:14:40.212359 | 2026-10-08T12:29:24.523333 → 2026-10-08T12:29:24.523333 | 0.2000 |
+| 190 | 620 | 1 | 2026-10-06T15:12:54.258164 → 2026-10-08T12:29:24.523333 | 2026-10-08T12:40:29.636021 → 2026-10-08T12:40:29.636021 | 0.2000 |
+| 191 | 621 | 1 | 2026-10-06T15:12:54.258164 → 2026-10-08T12:40:29.636021 | 2026-10-08T13:01:43.622069 → 2026-10-08T13:01:43.622069 | 0.2000 |
+| 192 | 622 | 4 | 2026-10-06T15:12:54.258164 → 2026-10-08T13:01:43.622069 | 2026-10-08T16:00:39.790553 → 2026-10-08T16:00:39.790553 | 0.0800 |
+| 193 | 626 | 3 | 2026-10-06T15:12:54.258164 → 2026-10-08T16:00:39.790553 | 2026-10-08T16:00:46.171336 → 2026-10-08T16:00:46.171336 | 0.1000 |
+| 194 | 629 | 4 | 2026-10-06T15:12:54.258164 → 2026-10-08T16:00:46.171336 | 2026-10-08T16:01:05.115251 → 2026-10-08T16:01:05.115251 | 0.0800 |
+| 195 | 633 | 3 | 2026-10-06T15:12:54.258164 → 2026-10-08T16:01:05.115251 | 2026-10-08T16:01:09.462856 → 2026-10-08T16:01:09.462856 | 0.1000 |
+| 196 | 636 | 3 | 2026-10-06T15:12:54.258164 → 2026-10-08T16:01:09.462856 | 2026-10-08T16:01:18.654295 → 2026-10-08T16:01:18.654295 | 0.1000 |
+| 197 | 639 | 3 | 2026-10-06T15:12:54.258164 → 2026-10-08T16:01:18.654295 | 2026-10-08T16:01:28.338946 → 2026-10-08T16:01:28.338946 | 0.1000 |
+| 198 | 642 | 1 | 2026-10-06T15:12:54.258164 → 2026-10-08T16:01:28.338946 | 2026-10-08T16:04:00.297722 → 2026-10-08T16:04:00.297722 | 0.2000 |
+| 199 | 643 | 2 | 2026-10-06T15:12:54.258164 → 2026-10-08T16:04:00.297722 | 2026-10-08T16:07:52.933320 → 2026-10-08T16:07:52.933320 | 0.1333 |
+| 200 | 645 | 1 | 2026-10-06T15:12:54.258164 → 2026-10-08T16:07:52.933320 | 2026-10-08T16:18:27.518689 → 2026-10-08T16:18:27.518689 | 0.2000 |
+| 201 | 646 | 1 | 2026-10-06T15:12:54.258164 → 2026-10-08T16:18:27.518689 | 2026-10-08T16:27:05.374731 → 2026-10-08T16:27:05.374731 | 0.2000 |
+| 202 | 647 | 1 | 2026-10-06T15:12:54.258164 → 2026-10-08T16:27:05.374731 | 2026-10-08T16:32:54.058641 → 2026-10-08T16:32:54.058641 | 0.2000 |
+| 203 | 648 | 4 | 2026-10-06T15:12:54.258164 → 2026-10-08T16:32:54.058641 | 2026-10-09T02:28:05.496093 → 2026-10-09T02:28:05.496093 | 0.0800 |
+| 204 | 652 | 3 | 2026-10-06T15:12:54.258164 → 2026-10-09T02:28:05.496093 | 2026-10-09T02:28:11.820689 → 2026-10-09T02:28:11.820689 | 0.1000 |
+| 205 | 655 | 4 | 2026-10-06T15:12:54.258164 → 2026-10-09T02:28:11.820689 | 2026-10-09T02:28:30.829691 → 2026-10-09T02:28:30.829691 | 0.0800 |
+| 206 | 659 | 3 | 2026-10-06T15:12:54.258164 → 2026-10-09T02:28:30.829691 | 2026-10-09T02:28:35.186813 → 2026-10-09T02:28:35.186813 | 0.1000 |
+| 207 | 662 | 3 | 2026-10-06T15:12:54.258164 → 2026-10-09T02:28:35.186813 | 2026-10-09T02:28:44.872176 → 2026-10-09T02:28:44.872176 | 0.1000 |
 
-Total pooled test predictions: 609
+Total pooled test predictions: 656
 
 ## Ablation results
 
-Measured on 188 walk-forward cutoffs; pooled across cutoffs.
+Measured on 207 walk-forward cutoffs; pooled across cutoffs.
 
 | Variant | Removed feature group | Accuracy | Macro F1 | Top-3 | Δ Macro F1 vs full |
 |---|---|---:|---:|---:|---:|
-| Static only | all sequential features | 0.3054 | 0.2187 | 0.8851 | -0.0250 |
-| Full MISTIQ-APR | — | 0.3087 | 0.2437 | 0.8867 | +0.0000 |
-| MISTIQ-APR without frequency | failure frequency | 0.3087 | 0.2415 | 0.8867 | -0.0022 |
-| MISTIQ-APR without recency | failure recency | 0.3087 | 0.2432 | 0.8867 | -0.0005 |
-| MISTIQ-APR without repetition | failure repetition | 0.3087 | 0.2353 | 0.8867 | -0.0084 |
-| MISTIQ-APR without transitions | failure transitions | 0.3087 | 0.2427 | 0.8867 | -0.0011 |
-| MISTIQ-APR without component history | component history | 0.3087 | 0.2437 | 0.8867 | +0.0000 |
-| MISTIQ-APR without failure diversity | recent failure diversity | 0.3087 | 0.2420 | 0.8883 | -0.0017 |
-| MISTIQ-APR without change intensity | change intensity | 0.3087 | 0.2347 | 0.8867 | -0.0090 |
-| MISTIQ-APR without testing weakness | testing weakness | 0.3087 | 0.2416 | 0.8867 | -0.0021 |
-| MISTIQ-APR without severity trajectory | severity trajectory | 0.3087 | 0.2421 | 0.8867 | -0.0016 |
+| Static only | all sequential features | 0.3125 | 0.2319 | 0.8872 | -0.0194 |
+| Full MISTIQ-APR | — | 0.3155 | 0.2512 | 0.8887 | +0.0000 |
+| MISTIQ-APR without frequency | failure frequency | 0.3155 | 0.2492 | 0.8887 | -0.0021 |
+| MISTIQ-APR without recency | failure recency | 0.3155 | 0.2511 | 0.8887 | -0.0001 |
+| MISTIQ-APR without repetition | failure repetition | 0.3155 | 0.2422 | 0.8887 | -0.0091 |
+| MISTIQ-APR without transitions | failure transitions | 0.3155 | 0.2498 | 0.8887 | -0.0014 |
+| MISTIQ-APR without component history | component history | 0.3155 | 0.2512 | 0.8887 | +0.0000 |
+| MISTIQ-APR without failure diversity | recent failure diversity | 0.3155 | 0.2487 | 0.8902 | -0.0025 |
+| MISTIQ-APR without change intensity | change intensity | 0.3155 | 0.2414 | 0.8887 | -0.0099 |
+| MISTIQ-APR without testing weakness | testing weakness | 0.3155 | 0.2485 | 0.8887 | -0.0027 |
+| MISTIQ-APR without severity trajectory | severity trajectory | 0.3155 | 0.2489 | 0.8887 | -0.0024 |
 
 ## Calibration
 
 Calibrated on pooled walk-forward test predictions for the MISTIQ-APR model. Brier score is the mean multiclass squared error (0..2, lower is better); ECE is the top-label expected calibration error over 10 confidence bins (lower is better).
 
-- Sample count: 609
-- Brier score (multiclass, lower is better): 0.6955
-- Expected Calibration Error (lower is better): 0.0044
+- Sample count: 656
+- Brier score (multiclass, lower is better): 0.6884
+- Expected Calibration Error (lower is better): 0.0042
 
 | Confidence bin | Count | Mean predicted | Empirical accuracy |
 |---|---:|---:|---:|
 | 0.0–0.1 | 0 | — | — |
 | 0.1–0.2 | 0 | — | — |
-| 0.2–0.3 | 272 | 0.2522 | 0.2537 |
-| 0.3–0.4 | 320 | 0.3264 | 0.3312 |
+| 0.2–0.3 | 288 | 0.2522 | 0.2535 |
+| 0.3–0.4 | 341 | 0.3266 | 0.3314 |
 | 0.4–0.5 | 2 | 0.4332 | 0.5000 |
-| 0.5–0.6 | 4 | 0.5337 | 0.5000 |
+| 0.5–0.6 | 8 | 0.5275 | 0.5000 |
 | 0.6–0.7 | 0 | — | — |
 | 0.7–0.8 | 2 | 0.7231 | 0.5000 |
 | 0.8–0.9 | 0 | — | — |
-| 0.9–1.0 | 9 | 0.9998 | 1.0000 |
+| 0.9–1.0 | 15 | 0.9998 | 1.0000 |
 
 ## Model artifact
 
@@ -301,13 +320,13 @@ Trained artifact: backend\ml\artifacts\mistiq_apr\model.pkl
 - Model: MISTIQ-APR v1.0
 - Feature count: 112
 - Categories: 5
-- Training observations: 618
-- Dataset hash: 50f1612ff35b5ade61bc0a57d2f5317aed2f00e4a7cd91ccc4cff3417063f062
-- Trained at: 2026-10-08T13:10:31+00:00
+- Training observations: 665
+- Dataset hash: 86741048544cce5bc683baa63497aecfa3ee29afa38939bb5a1291b3248b7436
+- Trained at: 2026-10-09T04:33:37+00:00
 - Evaluation protocol: walk_forward
 
 ## Limitations, sample size, and confidence
-- Sample size: 618 chronological observations across 171 project(s) and 363 review(s).
+- Sample size: 665 chronological observations across 184 project(s) and 395 review(s).
 Confidence: metrics are pooled over walk-forward cutoffs on this dataset only. Small-sample metrics (few cutoffs, few categories) carry high variance; confidence intervals cannot be established until more projects accumulate.
 MISTIQ-APR is a project-specific sequential failure-prediction framework adapted
 from the MISTIQ mistake-intelligence architecture. It is not claimed as a newly

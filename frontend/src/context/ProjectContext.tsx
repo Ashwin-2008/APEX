@@ -25,8 +25,31 @@ interface ProjectContextValue {
 const ProjectContext = createContext<ProjectContextValue | null>(null)
 
 export function ProjectProvider({ children }: { children: ReactNode }) {
-  // Start with null: BEFORE A PROJECT IS CONNECTED, no default project is shown
-  const [project, setProject] = useState<ConnectedProject | null>(null)
+  // Start with stored project if available; otherwise null
+  const [project, setProject] = useState<ConnectedProject | null>(() => {
+    try {
+      const raw = localStorage.getItem('mistiq.project.context')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (parsed && parsed.projectId) {
+          const name = parsed.path ? parsed.path.split(/[\\/]/).filter(Boolean).pop() : 'Connected project'
+          return {
+            projectId: parsed.projectId,
+            name: name || 'Connected project',
+            source: parsed.source || 'local',
+            path: parsed.path || '',
+            repositoryUrl: parsed.repositoryUrl,
+            branch: parsed.branch,
+            commitSha: parsed.commitSha,
+            monitoringStatus: parsed.monitoringStatus || 'active',
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return null
+  })
 
   const connect = (data: ConnectedProject) => {
     setProject(data)
@@ -38,8 +61,22 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   }
 
   const updateProject = (patch: Partial<ConnectedProject>) => {
-    setProject(prev => (prev ? { ...prev, ...patch } : null))
+    setProject(prev => {
+      if (!prev) return null
+      const updated = { ...prev, ...patch }
+      try {
+        const raw = localStorage.getItem('mistiq.project.context')
+        if (raw) {
+          const parsed = JSON.parse(raw)
+          localStorage.setItem('mistiq.project.context', JSON.stringify({ ...parsed, ...patch }))
+        }
+      } catch {
+        // ignore
+      }
+      return updated
+    })
   }
+
 
   return (
     <ProjectContext.Provider

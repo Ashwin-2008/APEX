@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from urllib.parse import urlparse
 
 from app.services.project_review_service import analyze_project
-from app.services.project_review_persistence import compare_reviews, failure_history, persist_analysis, project_history
+from app.services.project_review_persistence import compare_reviews, failure_history, persist_analysis, project_history, serialize_review
 from app.services.project_evolution_service import evolution, trajectory, requirements, research_observations
 from app.services.mistiq_apr_research_service import (
     research_dataset,
@@ -16,7 +16,8 @@ from app.services.mistiq_apr_research_service import (
 )
 from app.services.project_monitor import event_bus, start_watcher, stop_watcher
 from app.services.git_service import get_current_sha, get_branch, is_git_repository
-from app.models.entities import ReviewedProject
+from app.models.entities import ProjectReview, ReviewedProject
+from sqlalchemy import select
 
 router = APIRouter(prefix="/project-reviews")
 
@@ -298,3 +299,37 @@ def research_dataset_report(request: Request):
 def research_evaluation_report(request: Request):
     with request.app.state.SessionLocal() as session:
         return research_evaluation(session)
+
+
+@router.get("/projects", summary="List all reviewed projects")
+def list_projects(request: Request):
+    with request.app.state.SessionLocal() as session:
+        projects = session.scalars(select(ReviewedProject).order_by(ReviewedProject.updated_at.desc())).all()
+        return [
+            {
+                "id": p.id,
+                "name": p.name,
+                "repository_path": p.repository_path,
+                "source_type": p.source_type,
+                "repository_url": p.repository_url,
+                "branch": p.branch,
+                "current_commit_sha": p.current_commit_sha,
+                "monitoring_status": p.monitoring_status,
+                "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+            }
+            for p in projects
+        ]
+
+
+@router.get("/{project_id}/latest", summary="Get latest completed review for a project")
+def get_latest_review(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        latest = session.scalar(
+            select(ProjectReview)
+            .where(ProjectReview.project_id == project_id)
+            .order_by(ProjectReview.review_number.desc())
+        )
+        if not latest:
+            raise HTTPException(404, "No reviews found for this project")
+        return serialize_review(session, latest.id)
+

@@ -148,7 +148,7 @@ function BaselinePanel({ evaluation }: { evaluation: ResearchEvaluationResponse 
     <h2>Walk-forward model comparison</h2>
     <p className={`lab-badge ${evaluation.evaluation.status.startsWith('VALID') ? 'ok' : 'warn'}`}>{evaluation.evaluation.status}</p>
     <table className="lab-table">
-      <thead><tr><th>Model</th><th>Accuracy</th><th>Macro F1</th><th>Top-3</th></tr></thead>
+      <thead><tr><th>Model</th><th title="Proportion of next-failure predictions matching empirical outcomes.">Accuracy ⓘ</th><th title="Unweighted average of F1 across all failure categories, penalizing majority class bias.">Macro F1 ⓘ</th><th title="Empirical accuracy when counting true outcome within top 3 predicted categories.">Top-3 ⓘ</th></tr></thead>
       <tbody>
         {BASELINE_ORDER.map(name => {
           const row = results.find(result => result.model === name)
@@ -174,7 +174,7 @@ function WalkForwardPanel({ evaluation }: { evaluation: ResearchEvaluationRespon
     <p className={`lab-badge ${walk.status === 'COMPLETED' ? 'ok' : 'warn'}`}>{walk.status}</p>
     <p className="muted">{walk.message}</p>
     {walk.cutoffs.length > 0 && <table className="lab-table">
-      <thead><tr><th>Cutoff</th><th>Train size</th><th>Test size</th><th>Train time range</th><th>Test time range</th><th>Macro F1</th></tr></thead>
+      <thead><tr><th title="Sequential chronological partition boundary.">Cutoff ⓘ</th><th title="Number of historical observations before cutoff used for training.">Train size ⓘ</th><th title="Number of test observations evaluated.">Test size ⓘ</th><th>Train time range</th><th>Test time range</th><th title="Macro F1 on test window.">Macro F1 ⓘ</th></tr></thead>
       <tbody>
         {walk.cutoffs.map(cutoff => <tr key={cutoff.cutoff}>
           <td>{cutoff.cutoff}</td>
@@ -200,7 +200,7 @@ function AblationPanel({ evaluation }: { evaluation: ResearchEvaluationResponse 
       : <>
         <p className="muted">{ablation.message}</p>
         <table className="lab-table">
-          <thead><tr><th>Variant</th><th>Removed</th><th>Macro F1</th><th>Δ vs full</th></tr></thead>
+          <thead><tr><th>Variant</th><th>Removed</th><th title="Macro F1 without this feature group.">Macro F1 ⓘ</th><th title="Change in Macro F1 when this feature group is removed.">Δ vs full ⓘ</th></tr></thead>
           <tbody>
             {rows.map(row => <tr key={row.variant}>
               <td>{row.variant}</td>
@@ -225,8 +225,8 @@ function CalibrationPanel({ evaluation }: { evaluation: ResearchEvaluationRespon
         <p className="muted">{calibration.methodology}</p>
         <div className="lab-stat-grid">
           <div><span>Samples</span><strong>{calibration.sample_count}</strong></div>
-          <div><span>Brier score</span><strong>{calibration.brier_score?.toFixed(4)}</strong></div>
-          <div><span>ECE</span><strong>{calibration.expected_calibration_error?.toFixed(4)}</strong></div>
+          <div title="Mean squared difference between predicted probabilities and actual one-hot outcomes (0 is perfect)."><span>Brier score ⓘ</span><strong>{calibration.brier_score?.toFixed(4)}</strong></div>
+          <div title="Expected Calibration Error: weighted difference between confidence and empirical accuracy."><span>ECE ⓘ</span><strong>{calibration.expected_calibration_error?.toFixed(4)}</strong></div>
         </div>
         <table className="lab-table">
           <thead><tr><th>Bin</th><th>Count</th><th>Mean predicted</th><th>Empirical accuracy</th></tr></thead>

@@ -218,13 +218,42 @@ def failure_history(session: Session, project_id: int) -> dict:
     findings.sort(key=lambda item: (item["first_seen"], item["fingerprint"]))
 
     resolved = sum(1 for item in findings if item["status"] == "RESOLVED")
+    reopened = sum(1 for item in findings if item["status"] == "REOPENED")
+    total_occurrences = sum(item["occurrences"] for item in findings)
+    recurring_findings = [item for item in findings if item["occurrences"] > 1]
+    recurring_categories = sorted({item["category"] for item in recurring_findings})
+
+    # Category distribution
+    cat_distribution = []
+    categories = sorted({item["category"] for item in findings})
+    for cat in categories:
+        cat_items = [f for f in findings if f["category"] == cat]
+        cat_distinct = len(cat_items)
+        cat_occurrences = sum(f["occurrences"] for f in cat_items)
+        cat_active = sum(1 for f in cat_items if f["status"] != "RESOLVED")
+        cat_resolved = sum(1 for f in cat_items if f["status"] == "RESOLVED")
+        cat_crit_high = sum(1 for f in cat_items if f["severity"] in {"critical", "high"})
+        cat_distribution.append({
+            "category": cat,
+            "distinct_count": cat_distinct,
+            "total_occurrences": cat_occurrences,
+            "active_count": cat_active,
+            "resolved_count": cat_resolved,
+            "critical_high_count": cat_crit_high,
+        })
+
     timestamps = [review.timestamp for review in reviews]
     summary = {
         "review_count": len(reviews),
         "distinct_failure_count": len(findings),
         "open_failure_count": len(findings) - resolved,
         "resolved_failure_count": resolved,
-        "categories": sorted({item["category"] for item in findings}),
+        "reopened_failure_count": reopened,
+        "total_occurrences": total_occurrences,
+        "recurring_failure_count": len(recurring_findings),
+        "recurring_categories": recurring_categories,
+        "category_distribution": cat_distribution,
+        "categories": categories,
         "first_review_at": min(timestamps).isoformat() if timestamps else None,
         "last_review_at": max(timestamps).isoformat() if timestamps else None,
     }
@@ -232,5 +261,6 @@ def failure_history(session: Session, project_id: int) -> dict:
         "project": {"id": project.id, "name": project.name, "repository_path": project.repository_path},
         "summary": summary,
         "findings": findings,
+        "recurring_findings": recurring_findings,
         "message": None if findings else "No persisted failure history yet.",
     }
