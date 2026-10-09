@@ -1,4 +1,5 @@
 import type { DedupableFinding } from '../../utils/findingDedup'
+import { ShieldIcon, AlertTriangleIcon, CheckCircleIcon, ActivityIcon } from '../ui/Icons'
 
 export interface HealthCardModel {
   label: string
@@ -41,15 +42,39 @@ export function buildHealthCards(activeFindings: DedupableFinding[]): HealthCard
 }
 
 export function HealthCards({ cards }: { cards: HealthCardModel[] }) {
+  const getAccent = (label: string, value: string) => {
+    const isClean = value.includes('No ')
+    if (label === 'Overall risk') return isClean ? 'accent-success' : 'accent-critical'
+    if (label === 'Security') return isClean ? 'accent-success' : 'accent-critical'
+    if (label === 'Testing') return isClean ? 'accent-success' : 'accent-warning'
+    return isClean ? 'accent-success' : 'accent-info'
+  }
+
+  const getIcon = (label: string) => {
+    if (label === 'Overall risk') return AlertTriangleIcon
+    if (label === 'Security') return ShieldIcon
+    if (label === 'Testing') return ActivityIcon
+    return CheckCircleIcon
+  }
+
   return (
-    <section className="pr-health" aria-label="Project health">
-      {cards.map(card => (
-        <div className="pr-health-card" key={card.label}>
-          <span className="pr-health-label">{card.label}</span>
-          <strong className="pr-health-value">{card.value}</strong>
-          <span className="pr-health-note">{card.note}</span>
-        </div>
-      ))}
+    <section className="pr-health-grid" aria-label="Project health">
+      {cards.map(card => {
+        const accent = getAccent(card.label, card.value)
+        const Icon = getIcon(card.label)
+        return (
+          <div className={`pr-health-card card ${accent}`} key={card.label}>
+            <div className="pr-health-card-header">
+              <span className="pr-health-label">{card.label}</span>
+              <span className="pr-health-icon-wrap" aria-hidden="true">
+                <Icon size={14} />
+              </span>
+            </div>
+            <strong className="pr-health-value">{card.value}</strong>
+            <span className="pr-health-note">{card.note}</span>
+          </div>
+        )
+      })}
     </section>
   )
 }

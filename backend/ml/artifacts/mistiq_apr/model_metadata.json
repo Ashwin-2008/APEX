@@ -255,32 +255,32 @@
     "security",
     "testing"
   ],
-  "training_observations": 445,
+  "training_observations": 618,
   "dataset_version": "1.0.0",
-  "dataset_hash": "334837c0d39d24e20d65c5fa53ca0629797f3b89bc0e0b6659805f02f3665d1e",
-  "trained_at": "2026-10-07T17:39:48+00:00",
+  "dataset_hash": "50f1612ff35b5ade61bc0a57d2f5317aed2f00e4a7cd91ccc4cff3417063f062",
+  "trained_at": "2026-10-08T13:10:31+00:00",
   "evaluation_protocol": "walk_forward",
   "evaluation_metadata": {
     "protocol": "walk_forward",
     "status": "VALID EVALUATION AVAILABLE",
-    "n_cutoffs": 129,
+    "n_cutoffs": 188,
     "primary_model": "MISTIQ-APR",
     "primary_metrics": {
-      "sample_count": 437,
-      "accuracy": 0.2951945080091533,
-      "macro_precision": 0.23323219937170814,
-      "macro_recall": 0.24034007013658173,
-      "macro_f1": 0.23498706640716663,
-      "top_2_accuracy": 0.5903890160183066,
-      "top_3_accuracy": 0.8787185354691075,
-      "log_loss": 1.2625405466990682,
+      "sample_count": 609,
+      "accuracy": 0.30870279146141216,
+      "macro_precision": 0.25107766861326763,
+      "macro_recall": 0.24838481382170455,
+      "macro_f1": 0.24372900961413727,
+      "top_2_accuracy": 0.6009852216748769,
+      "top_3_accuracy": 0.8866995073891626,
+      "log_loss": 1.2309404401221082,
       "confusion_matrix": [
         [
-          36,
+          61,
           0,
-          31,
+          28,
           17,
-          44
+          69
         ],
         [
           0,
@@ -290,25 +290,25 @@
           0
         ],
         [
-          36,
+          60,
           0,
-          31,
+          28,
           16,
-          43
+          69
         ],
         [
-          12,
+          28,
           0,
-          9,
-          18,
-          15
+          8,
+          27,
+          19
         ],
         [
-          36,
+          61,
           0,
-          31,
+          28,
           18,
-          44
+          72
         ]
       ],
       "labels": [

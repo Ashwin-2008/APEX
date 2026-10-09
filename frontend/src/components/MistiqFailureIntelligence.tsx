@@ -1,14 +1,36 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getFailureHistory, getResearchPrediction, getResearchStatus, getTrajectory } from '../services/projectReviewApi'
-import type { FailureHistoryResponse, FailureHistoryRow, ResearchPrediction, ResearchStatus, TrajectoryResponse } from '../types/projectReview'
+import {
+  getFailureHistory,
+  getResearchPrediction,
+  getResearchStatus,
+  getTrajectory,
+} from '../services/projectReviewApi'
+import type {
+  FailureHistoryResponse,
+  FailureHistoryRow,
+  ResearchPrediction,
+  ResearchStatus,
+  TrajectoryResponse,
+} from '../types/projectReview'
 import type { EventConnectionState } from '../hooks/useProjectEvents'
 import { dimensionLabel } from '../utils/labels'
+import {
+  ShieldIcon,
+  ActivityIcon,
+  ZapIcon,
+  CheckCircleIcon,
+  AlertTriangleIcon,
+  GitCommitIcon,
+} from './ui/Icons'
 
 type PredictionState = 'A' | 'B' | 'C' | 'D' | 'E'
 
-const PREDICTION_INTRO = 'MISTIQ learns from how engineering problems appear and change across project reviews to identify recurring patterns and estimate what type of problem may appear next.'
-const PREDICTION_CONTEXT = 'Prediction is based on historical project observations and current project state. It is not a certainty or causal estimate.'
-const NO_HISTORY_YET = 'MISTIQ needs more project history before it can estimate the next failure category.'
+const PREDICTION_INTRO =
+  'MISTIQ learns from how engineering problems appear and change across project reviews to identify recurring patterns and estimate what type of problem may appear next.'
+const PREDICTION_CONTEXT =
+  'Prediction is based on historical project observations and current project state. It is not a certainty or causal estimate.'
+const NO_HISTORY_YET =
+  'MISTIQ needs more project history before it can estimate the next failure category.'
 
 interface MistiqFailureIntelligenceProps {
   projectId: number
@@ -18,7 +40,8 @@ interface MistiqFailureIntelligenceProps {
   refreshToken: number
 }
 
-const pretty = (value: string) => value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
+const pretty = (value: string) =>
+  value.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase())
 const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString() : 'Not available')
 const percent = (value: number) => `${(value * 100).toFixed(1)}%`
 
@@ -62,7 +85,11 @@ function evidenceLevel(total: number): { key: string; label: string; segments: n
 }
 
 function Badge({ value }: { value: string }) {
-  return <span className={`live-badge live-${String(value).toLowerCase()}`}>{pretty(value)}</span>
+  return (
+    <span className={`live-badge live-${String(value).toLowerCase()}`}>
+      {pretty(value)}
+    </span>
+  )
 }
 
 function locationOf(finding: FailureHistoryRow): string {
@@ -72,45 +99,75 @@ function locationOf(finding: FailureHistoryRow): string {
 }
 
 function whyItMatters(finding: FailureHistoryRow, reviewCount: number): string {
-  const recurrence = finding.occurrences > 1
-    ? `Detected in ${finding.occurrences} of ${reviewCount} persisted reviews, so this is a repeat observation rather than a one-off.`
-    : `Detected in 1 of ${reviewCount} persisted reviews so far.`
+  const recurrence =
+    finding.occurrences > 1
+      ? `Detected in ${finding.occurrences} of ${reviewCount} persisted reviews, so this is a repeat observation rather than a one-off.`
+      : `Detected in 1 of ${reviewCount} persisted reviews so far.`
   const confidence = Number.isFinite(finding.confidence)
     ? ` Analyzer confidence ${Math.round(finding.confidence * 100)}%.`
     : ' Analyzer confidence not available.'
-  const state = finding.status === 'RESOLVED'
-    ? ' It is resolved now and is kept here as failure history.'
-    : ' It is currently open.'
+  const state =
+    finding.status === 'RESOLVED'
+      ? ' It is resolved now and is kept here as failure history.'
+      : ' It is currently open.'
   return `${recurrence}${confidence}${state}`
 }
 
-function TimelineItem({ finding, reviewCount }: { finding: FailureHistoryRow; reviewCount: number }) {
+function TimelineItem({
+  finding,
+  reviewCount,
+}: {
+  finding: FailureHistoryRow
+  reviewCount: number
+}) {
   return (
-    <details className="fi-timeline-item">
-      <summary>
-        <Badge value={finding.severity} />
-        <Badge value={finding.status} />
-        <strong>{pretty(finding.category)}</strong>
-        <span className="fi-occurrence">{finding.occurrences} of {reviewCount} reviews</span>
+    <details className="fi-timeline-item card">
+      <summary className="fi-timeline-summary">
+        <div className="fi-summary-badges">
+          <Badge value={finding.severity} />
+          <Badge value={finding.status} />
+        </div>
+        <strong className="fi-summary-category">{pretty(finding.category)}</strong>
+        <span className="fi-occurrence">
+          {finding.occurrences} of {reviewCount} reviews
+        </span>
+        <span className="fi-summary-chevron">▾</span>
       </summary>
+
       <div className="fi-timeline-body">
         <dl>
           <dt>What</dt>
-          <dd>{pretty(finding.category)} failure · {pretty(finding.severity)} severity{Number.isFinite(finding.confidence) ? ` · ${Math.round(finding.confidence * 100)}% analyzer confidence` : ''}</dd>
+          <dd>
+            {pretty(finding.category)} failure · {pretty(finding.severity)} severity
+            {Number.isFinite(finding.confidence)
+              ? ` · ${Math.round(finding.confidence * 100)}% analyzer confidence`
+              : ''}
+          </dd>
           <dt>Where</dt>
           <dd>{locationOf(finding)}</dd>
           <dt>When</dt>
-          <dd>First seen {when(finding.first_seen)} · Last seen {when(finding.last_seen)} · reviews {finding.review_numbers.join(', ') || 'Not available'}</dd>
+          <dd>
+            First seen {when(finding.first_seen)} · Last seen {when(finding.last_seen)} · reviews{' '}
+            {finding.review_numbers.join(', ') || 'Not available'}
+          </dd>
           <dt>Evidence</dt>
-          <dd>{finding.evidence} <small>(source: {finding.analyzer_source})</small></dd>
+          <dd>
+            {finding.evidence} <small>(source: {finding.analyzer_source})</small>
+          </dd>
           <dt>Why it matters</dt>
           <dd>{whyItMatters(finding, reviewCount)}</dd>
           <dt>Recommended action</dt>
           <dd>{finding.remediation}</dd>
-          {finding.status === 'RESOLVED' && <>
-            <dt>Resolution</dt>
-            <dd>{finding.resolution_evidence || 'No resolution evidence was recorded.'} · resolved {when(finding.resolved_at)}{finding.related_commit ? ` · commit ${finding.related_commit}` : ''}</dd>
-          </>}
+          {finding.status === 'RESOLVED' && (
+            <>
+              <dt>Resolution</dt>
+              <dd>
+                {finding.resolution_evidence || 'No resolution evidence was recorded.'} · resolved{' '}
+                {when(finding.resolved_at)}
+                {finding.related_commit ? ` · commit ${finding.related_commit}` : ''}
+              </dd>
+            </>
+          )}
         </dl>
       </div>
     </details>
@@ -123,18 +180,47 @@ function RequirementList({ status }: { status: ResearchStatus }) {
   const categories = status.failure_categories
   const timepoints = status.distinct_timepoints ?? null
   if (!requirements) {
-    return <p className="fi-meta">Evaluation requirements: Not available from the research status response.</p>
+    return (
+      <p className="fi-meta">
+        Evaluation requirements: Not available from the research status response.
+      </p>
+    )
   }
   const moreObservations = Math.max(0, requirements.min_observations - observations)
   const moreCategories = Math.max(0, requirements.min_distinct_categories - categories)
-  const moreTimepoints = timepoints === null ? null : Math.max(0, requirements.min_distinct_timepoints - timepoints)
+  const moreTimepoints =
+    timepoints === null
+      ? null
+      : Math.max(0, requirements.min_distinct_timepoints - timepoints)
   return (
     <ul className="fi-requirements">
-      <li>Training observations: <strong>{observations}</strong> of {requirements.min_observations} required{moreObservations > 0 ? ` — ${moreObservations} more needed` : ' — requirement met'}</li>
-      <li>Distinct failure categories: <strong>{categories}</strong> of {requirements.min_distinct_categories} required{moreCategories > 0 ? ` — ${moreCategories} more needed` : ' — requirement met'}</li>
-      <li>Distinct review timepoints: <strong>{timepoints === null ? 'Not available' : timepoints}</strong> of {requirements.min_distinct_timepoints} required{moreTimepoints === null ? '' : moreTimepoints > 0 ? ` — ${moreTimepoints} more needed` : ' — requirement met'}</li>
-      <li>Dataset status: <strong>{status.status}</strong></li>
-      <li>Model status: <strong>{status.model_status}</strong>{status.model_detail ? ` — ${status.model_detail}` : ''}</li>
+      <li>
+        Training observations: <strong>{observations}</strong> of{' '}
+        {requirements.min_observations} required
+        {moreObservations > 0 ? ` — ${moreObservations} more needed` : ' — requirement met'}
+      </li>
+      <li>
+        Distinct failure categories: <strong>{categories}</strong> of{' '}
+        {requirements.min_distinct_categories} required
+        {moreCategories > 0 ? ` — ${moreCategories} more needed` : ' — requirement met'}
+      </li>
+      <li>
+        Distinct review timepoints:{' '}
+        <strong>{timepoints === null ? 'Not available' : timepoints}</strong> of{' '}
+        {requirements.min_distinct_timepoints} required
+        {moreTimepoints === null
+          ? ''
+          : moreTimepoints > 0
+          ? ` — ${moreTimepoints} more needed`
+          : ' — requirement met'}
+      </li>
+      <li>
+        Dataset status: <strong>{status.status}</strong>
+      </li>
+      <li>
+        Model status: <strong>{status.model_status}</strong>
+        {status.model_detail ? ` — ${status.model_detail}` : ''}
+      </li>
     </ul>
   )
 }
@@ -145,87 +231,180 @@ function formatFeatureValue(value: number): string {
 
 function PredictionOutput({ prediction }: { prediction: ResearchPrediction }) {
   const evidence = prediction.historical_evidence as Record<string, unknown> | undefined
-  const observed = Array.isArray(evidence?.observed_categories) ? (evidence.observed_categories as string[]) : []
+  const observed = Array.isArray(evidence?.observed_categories)
+    ? (evidence.observed_categories as string[])
+    : []
   const model = prediction.model as Record<string, unknown> | undefined
   const training = prediction.training_metadata as Record<string, unknown> | undefined
-  const features = Array.isArray(prediction.supporting_features) ? prediction.supporting_features : []
-  const predicted = prediction.predicted_category || prediction.predictions?.[0]?.category || ''
+  const features = Array.isArray(prediction.supporting_features)
+    ? prediction.supporting_features
+    : []
+  const predicted =
+    prediction.predicted_category || prediction.predictions?.[0]?.category || ''
   const reviewCount = evidence?.review_count
   const transitionCount = evidence?.transition_count
   const latestFindings = evidence?.findings_in_latest_review
-  const trainingObservations = training?.training_observations ?? model?.training_observations
-  const modelName = `${String(model?.name || model?.model || 'MISTIQ-APR')}${model?.version ? ` v${String(model.version)}` : ''}`
+  const trainingObservations =
+    training?.training_observations ?? model?.training_observations
+  const modelName = `${String(model?.name || model?.model || 'MISTIQ-APR')}${
+    model?.version ? ` v${String(model.version)}` : ''
+  }`
   const topFeatures = features.slice(0, 3)
+
   return (
     <div className="fi-prediction-output">
-      <p className="fi-meta">Most likely next issue:</p>
-      <div className="fi-prediction-list">
-        {(prediction.predictions || []).map(item => (
-          <div className="fi-prediction-row" key={item.category}>
-            <div><strong>{pretty(item.category)}</strong><b>{percent(item.probability)}</b></div>
-            <div className="fi-track"><i style={{ width: `${Math.min(100, Math.max(0, item.probability * 100))}%` }} /></div>
-          </div>
-        ))}
+      <div className="fi-pred-hero">
+        <p className="fi-meta">Most likely next issue:</p>
+        <div className="fi-prediction-list">
+          {(prediction.predictions || []).map((item, idx) => (
+            <div
+              className={`fi-prediction-row ${idx === 0 ? 'fi-pred-top' : ''}`}
+              key={item.category}
+            >
+              <div className="fi-pred-label-row">
+                <strong>{pretty(item.category)}</strong>
+                <b>{percent(item.probability)}</b>
+              </div>
+              <div className="fi-track">
+                <i
+                  style={{
+                    width: `${Math.min(100, Math.max(0, item.probability * 100))}%`,
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-      <section className="fi-why" aria-label="Why this prediction">
+
+      <section className="fi-why card" aria-label="Why this prediction">
         <h4>WHY THIS PREDICTION</h4>
         <ul>
-          <li>Historical evidence: {observed.length ? `past reviews recorded ${observed.map(pretty).join(', ')}` : 'no categories recorded'}{typeof reviewCount === 'number' ? ` across ${reviewCount} persisted reviews` : ''}.</li>
-          <li>Current project evidence: {typeof reviewCount === 'number' ? `${reviewCount} reviews` : 'review count not available'}{typeof transitionCount === 'number' ? ` · ${transitionCount} transitions` : ''}{typeof latestFindings === 'number' ? ` · ${latestFindings} findings in the latest review` : ''}.</li>
-          <li>Most influential signals: {topFeatures.length
-            ? `${topFeatures.map(feature => `${pretty(feature.feature)} (${feature.direction})`).join(', ')}.`
-            : 'no supporting features were returned by the saved model.'}{predicted ? ` ${pretty(predicted)} is the top predicted category.` : ''}</li>
+          <li>
+            Historical evidence:{' '}
+            {observed.length
+              ? `past reviews recorded ${observed.map(pretty).join(', ')}`
+              : 'no categories recorded'}
+            {typeof reviewCount === 'number' ? ` across ${reviewCount} persisted reviews` : ''}.
+          </li>
+          <li>
+            Current project evidence:{' '}
+            {typeof reviewCount === 'number'
+              ? `${reviewCount} reviews`
+              : 'review count not available'}
+            {typeof transitionCount === 'number' ? ` · ${transitionCount} transitions` : ''}
+            {typeof latestFindings === 'number'
+              ? ` · ${latestFindings} findings in the latest review`
+              : ''}
+            .
+          </li>
+          <li>
+            Most influential signals:{' '}
+            {topFeatures.length
+              ? `${topFeatures
+                  .map(feature => `${pretty(feature.feature)} (${feature.direction})`)
+                  .join(', ')}.`
+              : 'no supporting features were returned by the saved model.'}
+            {predicted ? ` ${pretty(predicted)} is the top predicted category.` : ''}
+          </li>
         </ul>
       </section>
+
       <div className="fi-context-grid">
-        <section className="fi-context-block" aria-label="Model training data">
+        <section className="fi-context-block card" aria-label="Model training data">
           <h4>MODEL TRAINING DATA</h4>
           <dl className="fi-evidence-block">
-            <dt>Model:</dt><dd>{modelName}</dd>
-            <dt>Training observations:</dt><dd>{trainingObservations !== undefined ? String(trainingObservations) : 'Not available'}</dd>
+            <dt>Model:</dt>
+            <dd>{modelName}</dd>
+            <dt>Training observations:</dt>
+            <dd>
+              {trainingObservations !== undefined
+                ? String(trainingObservations)
+                : 'Not available'}
+            </dd>
           </dl>
         </section>
-        <section className="fi-context-block" aria-label="Current project history">
+
+        <section className="fi-context-block card" aria-label="Current project history">
           <h4>CURRENT PROJECT HISTORY</h4>
           <dl className="fi-evidence-block">
-            <dt>Current project reviews:</dt><dd>{reviewCount !== undefined ? String(reviewCount) : 'Not available'}</dd>
-            <dt>Current project transitions:</dt><dd>{transitionCount !== undefined ? String(transitionCount) : 'Not available'}</dd>
-            <dt>Findings in latest review:</dt><dd>{latestFindings !== undefined ? String(latestFindings) : 'Not available'}</dd>
-            <dt>Observed categories:</dt><dd>{observed.length ? observed.map(pretty).join(', ') : 'None recorded'}</dd>
-            {evidence?.note ? (<><dt>Note</dt><dd>{String(evidence.note)}</dd></>) : null}
+            <dt>Current project reviews:</dt>
+            <dd>{reviewCount !== undefined ? String(reviewCount) : 'Not available'}</dd>
+            <dt>Current project transitions:</dt>
+            <dd>
+              {transitionCount !== undefined ? String(transitionCount) : 'Not available'}
+            </dd>
+            <dt>Findings in latest review:</dt>
+            <dd>
+              {latestFindings !== undefined ? String(latestFindings) : 'Not available'}
+            </dd>
+            <dt>Observed categories:</dt>
+            <dd>{observed.length ? observed.map(pretty).join(', ') : 'None recorded'}</dd>
+            {evidence?.note ? (
+              <>
+                <dt>Note</dt>
+                <dd>{String(evidence.note)}</dd>
+              </>
+            ) : null}
           </dl>
         </section>
       </div>
+
       <p className="fi-prediction-context">{PREDICTION_CONTEXT}</p>
+
       {features.length > 0 && (
-        <details className="fi-features">
+        <details className="fi-features card">
           <summary>Show technical model features</summary>
           <ul>
             {features.map(feature => (
               <li key={feature.feature}>
-                <span>{pretty(feature.feature)}: {formatFeatureValue(feature.value)}</span>
-                <small>{feature.direction} · contribution {feature.contribution}</small>
+                <span>
+                  {pretty(feature.feature)}: {formatFeatureValue(feature.value)}
+                </span>
+                <small>
+                  {feature.direction} · contribution {feature.contribution}
+                </small>
               </li>
             ))}
           </ul>
         </details>
       )}
-      <p className="fi-disclaimer">{prediction.disclaimer || 'Predictions come from a trained artifact and describe historical association. They are not certainties and do not imply causation.'}</p>
+
+      <p className="fi-disclaimer">
+        {prediction.disclaimer ||
+          'Predictions come from a trained artifact and describe historical association. They are not certainties and do not imply causation.'}
+      </p>
     </div>
   )
 }
 
-export function MistiqFailureIntelligence({ projectId, source, sseState, failureDna, refreshToken }: MistiqFailureIntelligenceProps) {
+export function MistiqFailureIntelligence({
+  projectId,
+  source,
+  sseState,
+  failureDna,
+  refreshToken,
+}: MistiqFailureIntelligenceProps) {
   const [history, setHistory] = useState<FailureHistoryResponse | null>(null)
   const [trajectory, setTrajectory] = useState<TrajectoryResponse | null>(null)
   const [researchStatus, setResearchStatus] = useState<ResearchStatus | null>(null)
   const [prediction, setPrediction] = useState<ResearchPrediction | null>(null)
-  const [errors, setErrors] = useState<{ history?: string; trajectory?: string; status?: string; prediction?: string }>({})
+  const [errors, setErrors] = useState<{
+    history?: string
+    trajectory?: string
+    status?: string
+    prediction?: string
+  }>({})
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
-    const settle = <T,>(promise: Promise<T>) => promise.then(value => ({ value })).catch((error: unknown) => ({ error: error instanceof Error ? error.message : 'Request failed.' }))
+    const settle = <T,>(promise: Promise<T>) =>
+      promise
+        .then(value => ({ value }))
+        .catch((error: unknown) => ({
+          error: error instanceof Error ? error.message : 'Request failed.',
+        }))
     Promise.all([
       settle(getFailureHistory(projectId)),
       settle(getTrajectory(projectId)),
@@ -245,12 +424,17 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
       })
       setRefreshedAt(new Date().toLocaleTimeString())
     })
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [projectId, refreshToken])
 
   const findings = history?.findings ?? []
   const summary = history?.summary
-  const openFindings = useMemo(() => findings.filter(item => item.status !== 'RESOLVED'), [findings])
+  const openFindings = useMemo(
+    () => findings.filter(item => item.status !== 'RESOLVED'),
+    [findings]
+  )
   const countsByCategory = useMemo(() => {
     const counts: Record<string, { open: number; resolved: number }> = {}
     for (const item of findings) {
@@ -267,37 +451,47 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
   const state: PredictionState = dataError
     ? 'E'
     : !summary || summary.distinct_failure_count === 0
-      ? 'A'
-      : !modelTrained
-        ? 'B'
-        : prediction?.available
-          ? 'C'
-          : 'D'
+    ? 'A'
+    : !modelTrained
+    ? 'B'
+    : prediction?.available
+    ? 'C'
+    : 'D'
 
   const repositoryPath = history?.project.repository_path.toLowerCase() || ''
-  const synthetic = repositoryPath.includes('showcase') || repositoryPath.includes('synthetic')
-  const liveLabel = sseState === 'CONNECTED'
-    ? 'LIVE · SSE CONNECTED'
-    : sseState === 'STOPPED'
+  const synthetic =
+    repositoryPath.includes('showcase') || repositoryPath.includes('synthetic')
+  const liveLabel =
+    sseState === 'CONNECTED'
+      ? 'LIVE · SSE CONNECTED'
+      : sseState === 'STOPPED'
       ? 'MONITORING STOPPED'
       : sseState === 'DISCONNECTED'
-        ? 'LIVE FEED DISCONNECTED'
-        : `LIVE · ${sseState}`
+      ? 'LIVE FEED DISCONNECTED'
+      : `LIVE · ${sseState}`
 
-  const topPredicted = state === 'C' && prediction?.predicted_category
-    ? prediction.predicted_category
-    : state === 'C' && prediction?.predictions?.length
+  const topPredicted =
+    state === 'C' && prediction?.predicted_category
+      ? prediction.predicted_category
+      : state === 'C' && prediction?.predictions?.length
       ? prediction.predictions[0].category
       : null
-  const connectedFindings = topPredicted ? openFindings.filter(item => item.category === topPredicted).slice(0, 5) : []
+  const connectedFindings = topPredicted
+    ? openFindings.filter(item => item.category === topPredicted).slice(0, 5)
+    : []
 
   if (!history && !errors.history) {
     return (
       <section className="card fi-card" aria-label="MISTIQ-APR Failure Intelligence">
-        <span className="card-kicker">MISTIQ-APR</span>
-        <h2>Failure Intelligence</h2>
-        <p className="fi-intro">{PREDICTION_INTRO}</p>
-        <p className="live-empty">Loading persisted failure history…</p>
+        <div className="fi-loading-box">
+          <span className="card-kicker">MISTIQ-APR</span>
+          <h2>Failure Intelligence</h2>
+          <p className="fi-intro">{PREDICTION_INTRO}</p>
+          <div className="loading-state">
+            <span className="loading-dot" aria-hidden="true" />
+            <p className="live-empty">Loading persisted failure history…</p>
+          </div>
+        </div>
       </section>
     )
   }
@@ -311,23 +505,37 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
           <p className="fi-intro">{PREDICTION_INTRO}</p>
         </div>
         <div className="fi-badges">
-          <span className={`fi-mode ${synthetic ? 'synthetic' : 'live'}`}>{synthetic ? 'SHOWCASE · SYNTHETIC DATA' : 'LIVE · ANALYZED REPOSITORY'}</span>
+          <span className={`fi-mode ${synthetic ? 'synthetic' : 'live'}`}>
+            {synthetic ? 'SHOWCASE · SYNTHETIC DATA' : 'LIVE · ANALYZED REPOSITORY'}
+          </span>
           <span className={`fi-live fi-${sseState.toLowerCase()}`}>{liveLabel}</span>
         </div>
       </header>
 
       <p className="fi-freshness">
-        Source: {source === 'github' ? 'GitHub repository' : 'Local folder'} ·
-        failure history last reviewed {summary ? when(summary.last_review_at) : 'Not available'} ·
+        Source: {source === 'github' ? 'GitHub repository' : 'Local folder'} · failure
+        history last reviewed {summary ? when(summary.last_review_at) : 'Not available'} ·
         data refreshed {refreshedAt || 'Not available'}
       </p>
 
       {summary ? (
-        <div className="fi-stats">
-          <div><span>Open failures</span><strong>{summary.open_failure_count}</strong></div>
-          <div><span>Resolved failures</span><strong>{summary.resolved_failure_count}</strong></div>
-          <div><span>Reviews observed</span><strong>{summary.review_count}</strong></div>
-          <div><span>Failure categories</span><strong>{summary.categories.length}</strong></div>
+        <div className="fi-stats-grid">
+          <div className="fi-stat-card card">
+            <span>Open failures</span>
+            <strong>{summary.open_failure_count}</strong>
+          </div>
+          <div className="fi-stat-card card">
+            <span>Resolved failures</span>
+            <strong>{summary.resolved_failure_count}</strong>
+          </div>
+          <div className="fi-stat-card card">
+            <span>Reviews observed</span>
+            <strong>{summary.review_count}</strong>
+          </div>
+          <div className="fi-stat-card card">
+            <span>Failure categories</span>
+            <strong>{summary.categories.length}</strong>
+          </div>
         </div>
       ) : (
         <div className="fi-error" role="alert">
@@ -336,7 +544,8 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
         </div>
       )}
 
-      <div className="fi-flow-block">
+      {/* PIPELINE DATA PATH */}
+      <div className="fi-flow-block card">
         <h3>From active findings to next-failure prediction</h3>
         <ol className="fi-flow">
           <li className={openFindings.length ? 'ok' : 'empty'}>
@@ -347,74 +556,143 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
             <span>Failure history</span>
             <strong>{summary ? summary.review_count : 'Not available'} reviews</strong>
           </li>
-          <li className={researchStatus && researchStatus.evaluation_requirements && researchStatus.training_observations >= researchStatus.evaluation_requirements.min_observations ? 'ok' : 'warn'}>
+          <li
+            className={
+              researchStatus &&
+              researchStatus.evaluation_requirements &&
+              researchStatus.training_observations >=
+                researchStatus.evaluation_requirements.min_observations
+                ? 'ok'
+                : 'warn'
+            }
+          >
             <span>Training dataset</span>
-            <strong>{researchStatus ? `${researchStatus.training_observations} observations` : 'Not available'}</strong>
+            <strong>
+              {researchStatus
+                ? `${researchStatus.training_observations} observations`
+                : 'Not available'}
+            </strong>
           </li>
           <li className={state === 'C' ? 'ok' : state === 'E' ? 'error' : 'warn'}>
             <span>Next-failure prediction</span>
             <strong>{STATE_FLOW_LABEL[state]}</strong>
           </li>
         </ol>
-        <p className="fi-note">Each stage shows persisted counts only. The stages are a data path, not a causal chain.</p>
+        <p className="fi-note">
+          Each stage shows persisted counts only. The stages are a data path, not a causal chain.
+        </p>
       </div>
 
+      {/* SECTION 1: FAILURE HISTORY */}
       <div className="fi-section">
-        <h3>FAILURE HISTORY <span className="fi-note">chronological · persisted reviews</span></h3>
+        <div className="fi-section-head">
+          <h3>FAILURE HISTORY</h3>
+          <span className="fi-note">chronological · persisted reviews</span>
+        </div>
         {errors.history ? (
-          <div className="fi-error" role="alert"><strong>Failure history unavailable</strong><p>{errors.history}</p></div>
+          <div className="fi-error" role="alert">
+            <strong>Failure history unavailable</strong>
+            <p>{errors.history}</p>
+          </div>
         ) : findings.length ? (
           <div className="fi-timeline">
-            {findings.map(finding => <TimelineItem key={finding.fingerprint} finding={finding} reviewCount={summary?.review_count || findings.length} />)}
+            {findings.map(finding => (
+              <TimelineItem
+                key={finding.fingerprint}
+                finding={finding}
+                reviewCount={summary?.review_count || findings.length}
+              />
+            ))}
           </div>
         ) : (
           <p className="live-empty">{history?.message || 'No persisted failure history yet.'}</p>
         )}
       </div>
 
+      {/* SECTION 2: FAILURE PATTERNS */}
       <div className="fi-section">
-        <h3>FAILURE PATTERNS</h3>
+        <div className="fi-section-head">
+          <h3>FAILURE PATTERNS</h3>
+        </div>
         {errors.trajectory ? (
-          <div className="fi-error" role="alert"><strong>Transition data unavailable</strong><p>{errors.trajectory}</p></div>
+          <div className="fi-error" role="alert">
+            <strong>Transition data unavailable</strong>
+            <p>{errors.trajectory}</p>
+          </div>
         ) : (
           <>
             {trajectory?.transitions.length ? (
               <div className="fi-transitions">
                 {trajectory.transitions.map((edge, index) => (
-                  <div key={`${edge.from}-${edge.to}-${index}`}>
+                  <div
+                    className="fi-transition-card card"
+                    key={`${edge.from}-${edge.to}-${index}`}
+                  >
                     <small className="fi-transition-kind">Observed historical pattern</small>
-                    <strong>{pretty(edge.from)}</strong><b>→</b><strong>{pretty(edge.to)}</strong>
-                    <span>observed {edge.count} time{edge.count === 1 ? '' : 's'}</span>
+                    <div className="fi-transition-arrow-row">
+                      <strong className="cat-pill">{pretty(edge.from)}</strong>
+                      <b className="arrow-char">→</b>
+                      <strong className="cat-pill">{pretty(edge.to)}</strong>
+                    </div>
+                    <span className="fi-transition-count">
+                      observed {edge.count} time{edge.count === 1 ? '' : 's'}
+                    </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="live-empty">{trajectory?.message || 'Insufficient historical evidence for transition analysis.'}</p>
+              <p className="live-empty">
+                {trajectory?.message ||
+                  'Insufficient historical evidence for transition analysis.'}
+              </p>
             )}
-            <p className="fi-disclaimer">Observed failure transitions come from persisted review sequences. Patterns show association, not causation.</p>
+
+            <p className="fi-disclaimer">
+              Observed failure transitions come from persisted review sequences. Patterns show association, not causation.
+            </p>
+
             {trajectory?.loops.length ? (
-              <div className="fi-loops">
+              <div className="fi-loops card">
                 <h4>Recurring patterns</h4>
                 {trajectory.loops.map((loop, index) => (
-                  <p key={`${loop.pattern}-${index}`}>{loop.pattern} <span>observed {loop.occurrence_count} time{loop.occurrence_count === 1 ? '' : 's'}</span></p>
+                  <p key={`${loop.pattern}-${index}`}>
+                    {loop.pattern}{' '}
+                    <span>
+                      observed {loop.occurrence_count} time{loop.occurrence_count === 1 ? '' : 's'}
+                    </span>
+                  </p>
                 ))}
               </div>
             ) : null}
+
             {findings.filter(item => item.occurrences > 1).length ? (
-              <div className="fi-loops">
+              <div className="fi-loops card">
                 <h4>Repeat failures</h4>
-                {findings.filter(item => item.occurrences > 1).map(item => (
-                  <p key={item.fingerprint}>{pretty(item.category)} <span>in {item.occurrences} of {summary?.review_count || '—'} reviews</span></p>
-                ))}
+                {findings
+                  .filter(item => item.occurrences > 1)
+                  .map(item => (
+                    <p key={item.fingerprint}>
+                      {pretty(item.category)}{' '}
+                      <span>
+                        in {item.occurrences} of {summary?.review_count || '—'} reviews
+                      </span>
+                    </p>
+                  ))}
               </div>
             ) : null}
           </>
         )}
       </div>
 
+      {/* SECTION 3: FAILURE DNA */}
       <div className="fi-section">
-        <h3>FAILURE DNA</h3>
-        <p className="fi-note">Levels are computed from persisted finding counts per category. Engine ratios are deterministic analyzer output, not probabilities. No percentages are invented: exact counts are shown next to every level.</p>
+        <div className="fi-section-head">
+          <h3>FAILURE DNA</h3>
+          <p className="fi-note">
+            Levels are computed from persisted finding counts per category. Engine ratios are deterministic analyzer output, not probabilities. No percentages are invented: exact counts are shown next to every level.
+          </p>
+        </div>
+
         <div className="fi-dna">
           {Object.entries(failureDna).map(([dimension, engineRatio]) => {
             const category = DNA_CATEGORY[dimension] || dimension
@@ -423,26 +701,57 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
             const level = evidenceLevel(total)
             const empty = level.segments === 0
             return (
-              <div className={`fi-dna-row${empty ? ' fi-dna-row-empty' : ''}`} key={dimension}>
+              <div
+                className={`fi-dna-row card ${empty ? 'fi-dna-row-empty' : ''}`}
+                key={dimension}
+              >
                 <div className="fi-dna-head">
-                  <span>{dimensionLabel(dimension)}</span>
+                  <span className="fi-dna-dim-title">{dimensionLabel(dimension)}</span>
                   <b className={`fi-level fi-level-${level.key}`}>{level.label}</b>
                 </div>
+
                 <div className="fi-dna-meter" aria-hidden="true">
-                  {Array.from({ length: 10 }, (_, index) => <i key={index} className={index < level.segments ? 'on' : ''} />)}
+                  {Array.from({ length: 10 }, (_, index) => (
+                    <i key={index} className={index < level.segments ? 'on' : ''} />
+                  ))}
                 </div>
-                <small className="fi-dna-counts">{counts.open} open · {counts.resolved} resolved</small>
-                <small className="fi-dna-observations">{total} supporting observation{total === 1 ? '' : 's'} in {pretty(category)}</small>
-                {empty && <small className="fi-dna-empty-note">No evidence currently supports this risk dimension.</small>}
-                {(total > 0 || engineRatio > 0) && <small className="fi-dna-ratio">Engine ratio {engineRatio.toFixed(2)} is deterministic analyzer output, not a probability.</small>}
+
+                <div className="fi-dna-counts-row">
+                  <small className="fi-dna-counts">
+                    {counts.open} open · {counts.resolved} resolved
+                  </small>
+                  <small className="fi-dna-observations">
+                    {total} supporting observation{total === 1 ? '' : 's'} in {pretty(category)}
+                  </small>
+                </div>
+
+                {empty && (
+                  <small className="fi-dna-empty-note">
+                    No evidence currently supports this risk dimension.
+                  </small>
+                )}
+
+                {(total > 0 || engineRatio > 0) && (
+                  <small className="fi-dna-ratio">
+                    Engine ratio {engineRatio.toFixed(2)} is deterministic analyzer output, not a probability.
+                  </small>
+                )}
               </div>
             )
           })}
         </div>
       </div>
 
+      {/* SECTION 4: NEXT FAILURE PREDICTION */}
       <div className={`fi-section fi-prediction-card fi-state-${state.toLowerCase()}`}>
-        <h3>NEXT FAILURE PREDICTION <span className={`fi-state-badge fi-state-badge-${state.toLowerCase()}`}>{STATE_LABEL[state]}</span></h3>
+        <div className="fi-section-head">
+          <h3>
+            NEXT FAILURE PREDICTION{' '}
+            <span className={`fi-state-badge fi-state-badge-${state.toLowerCase()}`}>
+              {STATE_LABEL[state]}
+            </span>
+          </h3>
+        </div>
 
         {state === 'E' && (
           <div className="fi-error" role="alert">
@@ -457,58 +766,106 @@ export function MistiqFailureIntelligence({ projectId, source, sseState, failure
         )}
 
         {state === 'A' && (
-          <>
-            <p className="fi-state-message">No failure has been persisted for this project yet. This is an observation state, not a training-data state: there is no failure evidence recorded, so there is nothing to predict from.</p>
+          <div className="fi-state-content card">
+            <p className="fi-state-message">
+              No failure has been persisted for this project yet. This is an observation state, not a training-data state: there is no failure evidence recorded, so there is nothing to predict from.
+            </p>
             <p className="fi-state-message">{NO_HISTORY_YET}</p>
-            {researchStatus && <p className="fi-meta">MISTIQ-APR model: {researchStatus.model_status}{researchStatus.model_detail ? ` — ${researchStatus.model_detail}` : ''} · dataset {researchStatus.status}</p>}
+            {researchStatus && (
+              <p className="fi-meta">
+                MISTIQ-APR model: {researchStatus.model_status}
+                {researchStatus.model_detail ? ` — ${researchStatus.model_detail}` : ''} ·
+                dataset {researchStatus.status}
+              </p>
+            )}
             {prediction?.available && <PredictionOutput prediction={prediction} />}
-            {!prediction?.available && prediction?.reason && <p className="fi-meta">Prediction for this project: {prediction.reason}</p>}
-          </>
+            {!prediction?.available && prediction?.reason && (
+              <p className="fi-meta">Prediction for this project: {prediction.reason}</p>
+            )}
+          </div>
         )}
 
         {state === 'B' && researchStatus && (
-          <>
-            <p className="fi-state-message">Failure history exists ({summary?.open_failure_count ?? 0} open, {summary?.resolved_failure_count ?? 0} resolved across {summary?.review_count ?? 0} reviews), but no trained MISTIQ-APR model is available for this dataset, so next-failure prediction is withheld rather than guessed.</p>
+          <div className="fi-state-content card">
+            <p className="fi-state-message">
+              Failure history exists ({summary?.open_failure_count ?? 0} open,{' '}
+              {summary?.resolved_failure_count ?? 0} resolved across{' '}
+              {summary?.review_count ?? 0} reviews), but no trained MISTIQ-APR model is available for this dataset, so next-failure prediction is withheld rather than guessed.
+            </p>
             <RequirementList status={researchStatus} />
-          </>
+          </div>
         )}
 
         {state === 'C' && prediction && <PredictionOutput prediction={prediction} />}
 
         {state === 'D' && prediction && (
-          <>
+          <div className="fi-state-content card">
             <p className="fi-state-message">Not available yet</p>
-            <p className="fi-state-message">A trained MISTIQ-APR artifact exists, but no prediction could be produced for this project.</p>
+            <p className="fi-state-message">
+              A trained MISTIQ-APR artifact exists, but no prediction could be produced for this project.
+            </p>
             <p className="fi-state-message">{NO_HISTORY_YET}</p>
             <ul className="fi-requirements">
-              <li>Reason: <strong>{prediction.reason || 'Not available'}</strong></li>
+              <li>
+                Reason: <strong>{prediction.reason || 'Not available'}</strong>
+              </li>
               <li>{prediction.message || 'No additional detail was returned.'}</li>
-              {researchStatus && <li>Model status: <strong>{researchStatus.model_status}</strong>{researchStatus.model_detail ? ` — ${researchStatus.model_detail}` : ''}</li>}
+              {researchStatus && (
+                <li>
+                  Model status: <strong>{researchStatus.model_status}</strong>
+                  {researchStatus.model_detail ? ` — ${researchStatus.model_detail}` : ''}
+                </li>
+              )}
             </ul>
-          </>
+          </div>
         )}
 
-        <div className="fi-connection">
+        <div className="fi-connection card">
           <h4>Evidence connected to the prediction</h4>
           {state === 'C' && topPredicted ? (
             connectedFindings.length ? (
               <>
-                <p className="fi-note">Open findings matched to the top predicted category ({pretty(topPredicted)}) by category only. This is an observed association, not causation.</p>
+                <p className="fi-note">
+                  Open findings matched to the top predicted category ({pretty(topPredicted)}) by category only. This is an observed association, not causation.
+                </p>
                 <ul className="fi-connected-list">
                   {connectedFindings.map(item => (
-                    <li key={item.fingerprint}><Badge value={item.severity} /><strong>{pretty(item.category)}</strong><span>{locationOf(item)}</span><small>{item.occurrences} of {summary?.review_count || '—'} reviews · {item.evidence}</small></li>
+                    <li key={item.fingerprint}>
+                      <Badge value={item.severity} />
+                      <strong>{pretty(item.category)}</strong>
+                      <span>{locationOf(item)}</span>
+                      <small>
+                        {item.occurrences} of {summary?.review_count || '—'} reviews ·{' '}
+                        {item.evidence}
+                      </small>
+                    </li>
                   ))}
                 </ul>
               </>
             ) : (
-              <p className="fi-note">No open finding currently matches the top predicted category ({pretty(topPredicted)}).</p>
+              <p className="fi-note">
+                No open finding currently matches the top predicted category ({pretty(topPredicted)}).
+              </p>
             )
           ) : state === 'A' ? (
-            <p className="fi-note">Nothing to connect: no failure has been recorded for this project.</p>
+            <p className="fi-note">
+              Nothing to connect: no failure has been recorded for this project.
+            </p>
           ) : state === 'B' ? (
-            <p className="fi-note">The data path stops at the training dataset: {researchStatus ? `${researchStatus.training_observations} of ${researchStatus.evaluation_requirements?.min_observations ?? 'Not available'} required observations` : 'research status unavailable'}.</p>
+            <p className="fi-note">
+              The data path stops at the training dataset:{' '}
+              {researchStatus
+                ? `${researchStatus.training_observations} of ${
+                    researchStatus.evaluation_requirements?.min_observations ?? 'Not available'
+                  } required observations`
+                : 'research status unavailable'}
+              .
+            </p>
           ) : state === 'D' ? (
-            <p className="fi-note">The model exists but returned no prediction for this project: {prediction?.reason || 'Not available'}</p>
+            <p className="fi-note">
+              The model exists but returned no prediction for this project:{' '}
+              {prediction?.reason || 'Not available'}
+            </p>
           ) : (
             <p className="fi-note">Connection unknown while prediction data fails to load.</p>
           )}

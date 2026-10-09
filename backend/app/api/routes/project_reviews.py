@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
-import re, subprocess
+import subprocess
 from pathlib import Path
 from pydantic import BaseModel, Field
+from urllib.parse import urlparse
 
 from app.services.project_review_service import analyze_project
 from app.services.project_review_persistence import compare_reviews, failure_history, persist_analysis, project_history
@@ -51,14 +52,33 @@ def taxonomy():
 def connect(request: ConnectRequest, app_request: Request):
     path = request.path.strip().strip('"').strip("'") if request.path else None
     if request.source_type == "github":
-        if not request.repository_url or not re.match(r"^https://github\.com/[^/]+/[^/]+(?:\.git)?/?$", request.repository_url): raise HTTPException(422, "Only public HTTPS GitHub repository URLs are supported.")
-        slug = request.repository_url.rstrip("/").removesuffix(".git").split("/")[-2:]
+        parsed = urlparse(request.repository_url or "")
+        parts = [part for part in parsed.path.strip("/").split("/") if part]
+        if parsed.scheme != "https" or parsed.hostname != "github.com" or len(parts) != 2 or any(part in {".", ".."} for part in parts):
+            raise HTTPException(422, "Only public HTTPS GitHub repository URLs are supported.")
+        slug = [parts[0], parts[1].removesuffix(".git")]
         target = (Path("data/repositories") / "-".join(slug)).resolve(); base = Path("data/repositories").resolve()
         if base not in target.parents: raise HTTPException(422, "Unsafe repository path.")
         target.parent.mkdir(parents=True, exist_ok=True)
         if not target.exists():
-            try: subprocess.run(["git", "clone", "--depth", "1", request.repository_url, str(target)], check=True, capture_output=True, text=True, timeout=180)
-            except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error: raise HTTPException(502, "Public GitHub repository could not be cloned.") from error
+            command = ["git", "clone"]
+            if request.branch:
+                command.extend(["--branch", request.branch])
+            command.extend([request.repository_url, str(target)])
+            try:
+                subprocess.run(command, check=True, capture_output=True, text=True, timeout=180)
+            except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+                detail = getattr(error, "stderr", "") or "clone failed"
+                raise HTTPException(502, f"Public GitHub repository could not be cloned: {detail.strip()[:240]}") from error
+        else:
+            try:
+                subprocess.run(["git", "-C", str(target), "remote", "set-url", "origin", request.repository_url], check=True, capture_output=True, text=True, timeout=30)
+                subprocess.run(["git", "-C", str(target), "fetch", "--prune", "origin"], check=True, capture_output=True, text=True, timeout=180)
+                remote_ref = f"origin/{request.branch}" if request.branch else "origin/HEAD"
+                subprocess.run(["git", "-C", str(target), "reset", "--hard", remote_ref], check=True, capture_output=True, text=True, timeout=30)
+            except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+                detail = getattr(error, "stderr", "") or "refresh failed"
+                raise HTTPException(502, f"Public GitHub repository could not be refreshed: {detail.strip()[:240]}") from error
         path = str(target)
     if not path or not Path(path).is_dir(): raise HTTPException(422, "A valid local project directory is required.")
     try:
@@ -97,7 +117,10 @@ def connect(request: ConnectRequest, app_request: Request):
         if analysis.get("next_failure_predictions"):
             event_bus.emit(project_id, {"type": "prediction.updated", "project_id": project_id, "predictions": analysis["next_failure_predictions"], "review_id": persisted["id"], "related_commit": git_sha})
         
+        last_git_sha = git_sha
+
         def on_change(event):
+            nonlocal last_git_sha
             event_type = event.get("type")
             print(f"[E2E] CALLBACK_RECEIVED project={project_id} type={event_type}", flush=True)
             if event_type == "monitoring.status":
@@ -115,13 +138,14 @@ def connect(request: ConnectRequest, app_request: Request):
                 event_bus.emit(project_id, event)
                 
                 # Update the project's Git SHA in the database if this is a Git transition
-                if current_commit_sha and current_commit_sha != git_sha:
+                if current_commit_sha and current_commit_sha != last_git_sha:
                     with app_request.app.state.SessionLocal() as session:
                         project = session.get(ReviewedProject, project_id)
                         if project:
                             project.current_commit_sha = current_commit_sha
                             project.branch = branch
                             session.commit()
+                    last_git_sha = current_commit_sha
                 
                 # Emit analysis.started
                 print(f"[E2E] ANALYSIS_STARTED project={project_id}", flush=True)
@@ -131,7 +155,7 @@ def connect(request: ConnectRequest, app_request: Request):
                     updated = analyze_project(path)
                     print(f"[E2E] ANALYSIS_COMPLETED project={project_id}", flush=True)
                     # Pass the current commit SHA to the persistence layer
-                    current_sha_for_analysis = current_commit_sha or git_sha
+                    current_sha_for_analysis = current_commit_sha or last_git_sha
                     with app_request.app.state.SessionLocal() as session:
                         print(f"[E2E] PERSISTENCE_STARTED project={project_id}", flush=True)
                         saved = persist_analysis(session, updated, affected_files=event.get("files", []), affected_analyzers=event.get("analyzers", []), related_commit=current_sha_for_analysis)
@@ -171,7 +195,7 @@ def connect(request: ConnectRequest, app_request: Request):
                     print(f"[E2E] ANALYSIS_FAILED project={project_id} error={error}", flush=True)
                     event_bus.emit(project_id, {"type": "analysis.failed", "project_id": project_id, "message": str(error)})
         start_watcher(project_id, path, on_change, git_sha)
-        return {"project_id": persisted["project_id"], "review_id": persisted["id"], "review_number": persisted["review_number"], "source_type": request.source_type, "path": path, "monitoring_status": "active", "analysis": analysis, "persisted_review": persisted}
+        return {"project_id": persisted["project_id"], "review_id": persisted["id"], "review_number": persisted["review_number"], "source_type": request.source_type, "path": path, "branch": git_branch, "current_commit_sha": git_sha, "monitoring_status": "active", "analysis": analysis, "persisted_review": persisted}
     except ValueError as error: raise HTTPException(422, str(error)) from error
 
 @router.post("/{project_id}/monitoring/stop")

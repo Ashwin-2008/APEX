@@ -1,6 +1,9 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LiveProjectReviewPage } from '../pages/LiveProjectReviewPage'
+import { NotificationCenter } from '../components/NotificationCenter'
+import { getProjectNotifications } from '../utils/projectNotifications'
 import { findingDisplayKey, type DedupableFinding } from '../utils/findingDedup'
 import type { FailureHistoryResponse, FailureHistoryRow, ProjectReview, RequirementReport, ResearchStatus } from '../types/projectReview'
 
@@ -69,8 +72,8 @@ const researchStatus: ResearchStatus = {
   evaluation_requirements: { min_observations: 10, min_distinct_categories: 2, min_distinct_timepoints: 3, min_walk_forward_train_observations: 6 },
 }
 
-async function connectProjectInUi() {
-  render(<LiveProjectReviewPage />)
+async function connectProjectInUi(extra?: ReactNode) {
+  render(<>{extra}<LiveProjectReviewPage /></>)
   const pathInput = await screen.findByLabelText('Project path')
   pathInput.focus()
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
@@ -86,6 +89,13 @@ function latestEventSource(): FakeEventSource {
   const instance = FakeEventSource.instances[FakeEventSource.instances.length - 1]
   expect(instance).toBeTruthy()
   return instance
+}
+
+function selectCategory(label: string): HTMLButtonElement {
+  const button = screen.getByRole('button', { name: label }) as HTMLButtonElement
+  fireEvent.click(button)
+  expect(button.getAttribute('aria-current')).toBe('page')
+  return button
 }
 
 describe('live project review page', () => {
@@ -128,11 +138,20 @@ describe('live project review page', () => {
     expect(screen.getByText('Hard-coded secret detected')).toBeTruthy()
     expect(screen.getAllByText('Rotate the credential.').length).toBeGreaterThan(0)
     expect(screen.getByRole('heading', { name: 'WHAT SHOULD I DO NEXT?' })).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'WHAT CHANGED?' })).toBeTruthy()
+
+    selectCategory('Requirements')
     expect(screen.getByRole('heading', { name: 'REQUIREMENTS' })).toBeTruthy()
     expect(await screen.findByText('Export data as CSV')).toBeTruthy()
+
+    selectCategory('Fixed')
     expect(screen.getByRole('heading', { name: 'RECENTLY FIXED' })).toBeTruthy()
     expect(screen.getByText(/No issues have been resolved/)).toBeTruthy()
+
+    selectCategory('Changes')
     expect(screen.getByRole('heading', { name: 'WHAT CHANGED?' })).toBeTruthy()
+
+    selectCategory('Overview')
 
     const steps = screen.getByRole('list', { name: 'Getting started steps' })
     expect(within(steps).getByText('STEP 1 Connected')).toBeTruthy()
@@ -176,8 +195,11 @@ describe('live project review page', () => {
     })
     const problems = screen.getByRole('heading', { name: 'PROBLEMS TO FIX' }).closest('section') as HTMLElement
     await waitFor(() => expect(within(problems).queryByText('Hard-coded secret detected')).toBeNull())
+
+    selectCategory('Fixed')
     expect(screen.getByText('Credential moved to the secret manager.')).toBeTruthy()
     expect(screen.getAllByText('abc1234').length).toBeGreaterThan(0)
+    selectCategory('Overview')
 
     source.emit('monitoring.status', { status: 'paused', branch: 'main', current_commit_sha: 'abc1234def' })
     await waitFor(() => expect(screen.getByText(/Monitoring: MONITORING PAUSED/)).toBeTruthy())
@@ -215,5 +237,81 @@ describe('live project review page', () => {
     const stopCall = calls.find(call => String(call[0]).endsWith('/monitoring/stop'))
     expect(stopCall).toBeTruthy()
     expect(stopCall?.[1]).toMatchObject({ method: 'POST' })
+  })
+
+  it('switches project review categories while keeping the connected project context', async () => {
+    await connectProjectInUi()
+    const source = latestEventSource()
+    source.connect()
+    await waitFor(() => expect(screen.getByText(/Monitoring: LIVE MONITORING/)).toBeTruthy())
+
+    const nav = screen.getByRole('navigation', { name: 'Project review categories' })
+    expect(within(nav).getAllByRole('button').map(button => button.textContent)).toEqual([
+      'Overview', 'Changes', 'Problems', 'Fixed', 'Requirements', 'Next steps', 'Failure intelligence',
+    ])
+
+    selectCategory('Problems')
+    expect(screen.getByRole('heading', { name: 'PROBLEMS TO FIX' })).toBeTruthy()
+    expect(screen.getByText('Overall risk')).toBeTruthy()
+
+    selectCategory('Next steps')
+    expect(screen.getByRole('heading', { name: 'WHAT SHOULD I DO NEXT?' })).toBeTruthy()
+    expect(screen.getAllByText('Rotate the credential.').length).toBeGreaterThan(0)
+
+    selectCategory('Failure intelligence')
+    expect(screen.getByRole('heading', { name: 'Failure Intelligence' })).toBeTruthy()
+
+    selectCategory('Overview')
+    expect(screen.getByRole('heading', { level: 1, name: 'demo-app' })).toBeTruthy()
+    expect(screen.getByText('LIVE MODE')).toBeTruthy()
+    expect(screen.getByText(/Monitoring: LIVE MONITORING/)).toBeTruthy()
+    expect(screen.getByRole('heading', { name: 'PROBLEMS TO FIX' })).toBeTruthy()
+  })
+
+  it('turns real SSE findings into notifications that move from NEW to SEEN', async () => {
+    await connectProjectInUi(<NotificationCenter />)
+    const source = latestEventSource()
+    source.connect()
+    await waitFor(() => expect(screen.getByText(/Monitoring: LIVE MONITORING/)).toBeTruthy())
+
+    const firstFinding = {
+      category: 'security', severity: 'high', confidence: 0.9, timestamp: '2026-10-08T10:10:00Z',
+      evidence: 'Token accepted from a request header', analyzer_source: 'secret_detector',
+      status: 'OPEN', remediation: 'Rotate the token.', fingerprint: 'fp-notif-1',
+    }
+    source.emit('finding.created', { finding: firstFinding })
+    source.emit('finding.created', { finding: firstFinding })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Notifications, 1 new' })).toBeTruthy())
+    expect(getProjectNotifications()).toHaveLength(1)
+
+    screen.getByRole('button', { name: 'Notifications, 1 new' }).click()
+    const panel = await screen.findByRole('region', { name: 'Notification center' })
+    expect(within(panel).getByText('NEW (0)')).toBeTruthy()
+    expect(within(panel).getByText('SEEN (1)')).toBeTruthy()
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'SEEN (1)' }))
+    expect(within(panel).getByText('New engineering risk')).toBeTruthy()
+
+    screen.getByRole('button', { name: /^Notifications/ }).click()
+    screen.getByRole('button', { name: /^Notifications/ }).click()
+    const reopened = screen.getByRole('region', { name: 'Notification center' })
+    expect(within(reopened).getByText('SEEN (1)')).toBeTruthy()
+
+    const secondFinding = {
+      category: 'testing', severity: 'medium', confidence: 0.7, timestamp: '2026-10-08T10:11:00Z',
+      evidence: 'No test inventory present', analyzer_source: 'test_inventory',
+      status: 'OPEN', remediation: 'Add tests.', fingerprint: 'fp-notif-2',
+    }
+    source.emit('finding.created', { finding: secondFinding })
+    source.emit('finding.created', { finding: secondFinding })
+    await waitFor(() => expect(within(screen.getByRole('region', { name: 'Notification center' })).getByText('NEW (1)')).toBeTruthy())
+    expect(within(screen.getByRole('region', { name: 'Notification center' })).getByText('SEEN (1)')).toBeTruthy()
+    expect(getProjectNotifications()).toHaveLength(2)
+    expect(getProjectNotifications().filter(item => item.seen)).toHaveLength(1)
+
+    const markAll = screen.getByRole('button', { name: 'Mark all seen' })
+    markAll.click()
+    await waitFor(() => expect(within(screen.getByRole('region', { name: 'Notification center' })).getByText('NEW (0)')).toBeTruthy())
+    expect(getProjectNotifications().every(item => item.seen)).toBe(true)
   })
 })

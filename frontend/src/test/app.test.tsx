@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import App from '../App'
 import { StudentProvider } from '../context/StudentContext'
+import { ThemeProvider } from '../context/ThemeContext'
+import { PracticePage } from '../pages/Pages'
 const responsiveStyles = readFileSync('src/styles/index.css', 'utf8')
 
 const question = {
@@ -25,7 +27,15 @@ const prediction = {
 function jsonResponse(body: unknown, status = 200) {
   return Promise.resolve({ ok: status >= 200 && status < 300, status, json: async () => body } as Response)
 }
-function setup(path: string, options: { predictionStatus?: number; progress?: Record<string, unknown>; mistakes?: unknown[] } = {}) {
+function renderApp(path: string) {
+  return render(<MemoryRouter initialEntries={[path]}><ThemeProvider><StudentProvider><App /></StudentProvider></ThemeProvider></MemoryRouter>)
+}
+
+function renderPractice() {
+  return render(<MemoryRouter initialEntries={['/practice']}><ThemeProvider><StudentProvider><PracticePage /></StudentProvider></ThemeProvider></MemoryRouter>)
+}
+
+function setup(path: string, options: { predictionStatus?: number; progress?: Record<string, unknown>; mistakes?: unknown[] } = {}, mount: (path: string) => void = renderApp) {
   localStorage.setItem('mistiq.development.studentId', '7')
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
@@ -42,7 +52,7 @@ function setup(path: string, options: { predictionStatus?: number; progress?: Re
     return jsonResponse({ detail: 'Unexpected test API request' }, 500)
   })
   vi.stubGlobal('fetch', fetchMock)
-  render(<MemoryRouter initialEntries={[path]}><StudentProvider><App /></StudentProvider></MemoryRouter>)
+  mount(path)
   return fetchMock
 }
 
@@ -61,7 +71,7 @@ describe('MISTIQ student app', () => {
   })
 
   it('loads a backend question, submits the answer, and shows checked feedback', async () => {
-    const fetchMock = setup('/practice')
+    const fetchMock = setup('/practice', {}, renderPractice)
     expect(await screen.findByText(question.question_text)).toBeTruthy()
     fireEvent.click(screen.getByText('Precision'))
     fireEvent.click(screen.getByRole('button', { name: /submit answer/i }))
@@ -82,14 +92,14 @@ describe('MISTIQ student app', () => {
       if (String(input).endsWith('/questions')) return new Promise<Response>(resolve => { finishQuestions = resolve })
       return jsonResponse({ detail: 'not found' }, 404)
     }))
-    render(<MemoryRouter initialEntries={['/practice']}><StudentProvider><App /></StudentProvider></MemoryRouter>)
+    renderPractice()
     expect(await screen.findByText('Finding a question…')).toBeTruthy()
     finishQuestions(await jsonResponse([question]))
     expect(await screen.findByText(question.question_text)).toBeTruthy()
   })
 
   it('shows an incorrect-answer feedback panel without blame', async () => {
-    const fetchMock = setup('/practice')
+    const fetchMock = setup('/practice', {}, renderPractice)
     fetchMock.mockImplementation(async (input, init) => {
       if (String(input).endsWith('/students/7')) return jsonResponse(profile)
       if (String(input).endsWith('/questions')) return jsonResponse([question])
@@ -110,7 +120,7 @@ describe('MISTIQ student app', () => {
   it('shows a useful backend-unavailable state', async () => {
     localStorage.setItem('mistiq.development.studentId', '7')
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network failure') }))
-    render(<MemoryRouter initialEntries={['/practice']}><StudentProvider><App /></StudentProvider></MemoryRouter>)
+    renderApp('/login')
     expect(await screen.findByRole('alert')).toBeTruthy()
     expect(screen.getByText(/could not restore your student profile/i)).toBeTruthy()
   })
@@ -126,7 +136,7 @@ describe('MISTIQ student app', () => {
       return jsonResponse({ detail: 'Not found' }, 404)
     })
     vi.stubGlobal('fetch', fetchMock)
-    render(<MemoryRouter initialEntries={['/login']}><StudentProvider><App /></StudentProvider></MemoryRouter>)
+    renderApp('/login')
     expect(await screen.findByText('This local demonstration uses synthetic data only. It does not provide account authentication.')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Your name'), { target: { value: 'Sam Learner' } })
     fireEvent.click(screen.getByRole('button', { name: /create a local profile/i }))
@@ -144,7 +154,7 @@ describe('MISTIQ student app', () => {
       return jsonResponse({ detail: 'Not found' }, 404)
     })
     vi.stubGlobal('fetch', fetchMock)
-    render(<MemoryRouter initialEntries={['/login']}><StudentProvider><App /></StudentProvider></MemoryRouter>)
+    renderApp('/login')
     expect(await screen.findByText(/A learning system that predicts what a student may struggle with next/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /start showcase/i }))
     expect(await screen.findByText('Good to see you, Aadhi.')).toBeTruthy()
@@ -163,7 +173,7 @@ describe('MISTIQ student app', () => {
       })
       return jsonResponse({ detail: 'Not found' }, 404)
     }))
-    render(<MemoryRouter initialEntries={['/profile']}><StudentProvider><App /></StudentProvider></MemoryRouter>)
+    renderApp('/profile')
     expect(await screen.findByText('Your learning profile')).toBeTruthy()
     expect(screen.getByText('Concept confidence')).toBeTruthy()
     expect(screen.getByText('Challenge handling')).toBeTruthy()
@@ -188,7 +198,7 @@ describe('MISTIQ student app', () => {
       })
       return jsonResponse({ detail: 'Not found' }, 404)
     }))
-    render(<MemoryRouter initialEntries={['/progress']}><StudentProvider><App /></StudentProvider></MemoryRouter>)
+    renderApp('/progress')
     expect(await screen.findByText('Topic progress')).toBeTruthy()
     expect(screen.getByText('Precision')).toBeTruthy()
     expect(screen.getByRole('img', { name: 'Cumulative accuracy and attempted difficulty by chronological attempt number' })).toBeTruthy()
@@ -210,7 +220,7 @@ describe('MISTIQ student app', () => {
       })
       return jsonResponse({ detail: 'Not found' }, 404)
     }))
-    render(<MemoryRouter initialEntries={['/mistakes']}><StudentProvider><App /></StudentProvider></MemoryRouter>)
+    renderApp('/mistakes')
     expect(await screen.findByText('3 recorded review moments')).toBeTruthy()
     expect(screen.getByText('Patterns that have appeared more than once')).toBeTruthy()
     expect(screen.getByText(/3 confusion events/)).toBeTruthy()
@@ -245,7 +255,7 @@ describe('MISTIQ student app', () => {
       })
       return jsonResponse({ detail: 'Not found' }, 404)
     }))
-    render(<MemoryRouter initialEntries={['/dashboard']}><StudentProvider><App /></StudentProvider></MemoryRouter>)
+    renderApp('/dashboard')
     expect(await screen.findByText('Classification')).toBeTruthy()
     fireEvent.click(screen.getByText('Why am I seeing this?'))
     expect(await screen.findByText('Recent mistakes contributed to the model score.')).toBeTruthy()
@@ -266,11 +276,35 @@ describe('MISTIQ student app', () => {
     expect(screen.queryByText(/\d+%/)).toBeNull()
   })
 
-  it('keeps mobile navigation to five student destinations', async () => {
+  it('keeps the workspace navigation to the engineering destinations', async () => {
+    setup('/dashboard', { predictionStatus: 409 })
+    const mainNav = await screen.findByRole('navigation', { name: 'Main navigation' })
+    const labels = within(mainNav).getAllByRole('link').map(link => link.textContent || '')
+    expect(labels).toContain('Dashboard')
+    expect(labels).toContain('Project Review')
+    expect(labels.some(l => l.includes('Project Evolution') || l.includes('Progress'))).toBe(true)
+    expect(labels).toContain('Engineering Failures')
+    expect(labels).not.toContain('Practice')
+    expect(screen.getByRole('link', { name: 'Research Lab' }).getAttribute('href')).toBe('/project-review/research-lab')
+    expect(screen.getAllByRole('link', { name: /profile/i }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('link', { name: /profile/i }).some(link => link.getAttribute('href') === '/profile')).toBe(true)
+  })
+
+  it('keeps mobile navigation to four student destinations without Practice', async () => {
     setup('/dashboard', { predictionStatus: 409 })
     const nav = await screen.findByRole('navigation', { name: 'Mobile navigation' })
-    expect(within(nav).getAllByRole('link')).toHaveLength(5)
+    const labels = within(nav).getAllByRole('link').map(link => link.textContent || '')
+    expect(labels).toHaveLength(4)
+    expect(labels).not.toContain('Practice')
+    expect(nav.querySelector('a[href="/project-review"]')).not.toBeNull()
     expect(nav.querySelector('a[href="/research"]')).toBeNull()
+  })
+
+  it('redirects the removed Practice route back to the dashboard', async () => {
+    setup('/practice', { predictionStatus: 409 })
+    const nav = await screen.findByRole('navigation', { name: 'Mobile navigation' })
+    expect(nav.querySelector('a[href="/practice"]')).toBeNull()
+    expect(nav.querySelector('a[href="/dashboard"]')).not.toBeNull()
   })
 
   it('defines responsive rules for the 320px minimum and mobile navigation', () => {

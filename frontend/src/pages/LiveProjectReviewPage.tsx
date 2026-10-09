@@ -12,6 +12,8 @@ import { RequirementsSection } from '../components/projectReview/RequirementsSec
 import { RecommendationsSection } from '../components/projectReview/RecommendationsSection'
 import { applyFindingEvent, dedupeActiveFindings, dedupeRecommendations, findingDisplayKey, seedFindings, type DedupableFinding } from '../utils/findingDedup'
 import { appendActivity, categoryNoun, categoryTitle, severityLabel, translateEvent, type ActivityEntry } from '../utils/labels'
+import { persistProjectContext, recordProjectNotification } from '../utils/projectNotifications'
+import { useProject } from '../context/ProjectContext'
 import type { FailureEvent, FailureHistoryRow, ProjectReview } from '../types/projectReview'
 import '../styles/liveProjectReview.css'
 
@@ -33,19 +35,23 @@ function readString(value: unknown): string | null {
 function OnboardingSteps({ steps, onDismiss }: { steps: Array<{ label: string; done: boolean }>; onDismiss: () => void }) {
   const allDone = steps.every(step => step.done)
   return (
-    <section className="pr-onboarding" aria-label="Getting started">
-      <ol aria-label="Getting started steps">
+    <section className="pr-onboarding card" aria-label="Getting started">
+      <div className="pr-onboarding-head">
+        <span className="eyebrow">OBSERVABILITY ONBOARDING</span>
+        <h3>Continuous Inspection Pipeline</h3>
+      </div>
+      <ol className="pr-onboarding-steps" aria-label="Getting started steps">
         {steps.map((step, index) => (
           <li key={step.label} className={step.done ? 'done' : 'pending'}>
             <span className="pr-step-index" aria-hidden="true">{step.done ? '✓' : index + 1}</span>
-            <span>STEP {index + 1} {step.label}</span>
+            <span className="pr-step-text">STEP {index + 1} {step.label}</span>
           </li>
         ))}
       </ol>
       {allDone && (
         <div className="pr-onboarding-done">
           <p>Your project is now being monitored. Save a file to see MISTIQ-APR analyze the change automatically.</p>
-          <button type="button" className="button" onClick={onDismiss}>Got it</button>
+          <button type="button" className="button button-sm" onClick={onDismiss}>Got it</button>
         </div>
       )}
     </section>
@@ -53,6 +59,7 @@ function OnboardingSteps({ steps, onDismiss }: { steps: Array<{ label: string; d
 }
 
 export function LiveProjectReviewPage() {
+  const { connect: setGlobalProject, updateProject } = useProject()
   const [source, setSource] = useState<'local' | 'github'>('local')
   const [value, setValue] = useState('')
   const [connecting, setConnecting] = useState(false)
@@ -82,15 +89,23 @@ export function LiveProjectReviewPage() {
   const [stopping, setStopping] = useState(false)
   const [stopError, setStopError] = useState('')
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
+  const [activeTab, setActiveTab] = useState<'overview' | 'changes' | 'problems' | 'fixed' | 'requirements' | 'next' | 'intelligence'>('overview')
 
   function handleEvent(event: ProjectEvent) {
+    recordProjectNotification(event)
     const entry = translateEvent(event, 0)
     setActivity(previous => appendActivity(previous, entry))
 
     const nextBranch = readString(event.branch)
     const nextSha = readString(event.current_commit_sha)
-    if (nextBranch) setBranch(nextBranch)
-    if (nextSha) setCommitSha(nextSha)
+    if (nextBranch) {
+      setBranch(nextBranch)
+      updateProject({ branch: nextBranch })
+    }
+    if (nextSha) {
+      setCommitSha(nextSha)
+      updateProject({ commitSha: nextSha })
+    }
 
     switch (event.type) {
       case 'project.changed': {
@@ -119,9 +134,12 @@ export function LiveProjectReviewPage() {
           setFailureDna(event.failure_dna as Record<string, number>)
         }
         break
-      case 'monitoring.status':
-        setMonitoringPaused(readString(event.status) !== 'active')
+      case 'monitoring.status': {
+        const nextStatus = readString(event.status)
+        setMonitoringPaused(nextStatus !== 'active')
+        if (nextStatus) updateProject({ monitoringStatus: nextStatus })
         break
+      }
       case 'finding.resolved': {
         const payload = event as unknown as ResolvedPayload
         const fingerprint = String(payload.fingerprint || '')
@@ -197,6 +215,22 @@ export function LiveProjectReviewPage() {
       const result = await connectProject(source, value.trim())
       setProjectId(result.project_id)
       setReview(result.analysis)
+      setRepositoryPath(result.path || result.analysis.project.path)
+      const ctx = {
+        projectId: result.project_id,
+        source,
+        repositoryUrl: source === 'github' ? value.trim() : null,
+        path: result.path || result.analysis.project.path,
+        branch: result.branch,
+        commitSha: result.current_commit_sha,
+        monitoringStatus: result.monitoring_status,
+      }
+      persistProjectContext(ctx)
+      setGlobalProject({
+        ...ctx,
+        name: (result.path || result.analysis.project.path).split(/[\\/]/).filter(Boolean).pop() || 'Connected project',
+        review: result.analysis,
+      })
       setFailureDna(result.analysis.failure_dna)
       setFindings(seedFindings(result.analysis.events))
       setMonitoringPaused(result.monitoring_status !== 'active')
@@ -215,6 +249,7 @@ export function LiveProjectReviewPage() {
     try {
       await stopMonitoring(projectId)
       setMonitoringPaused(true)
+      updateProject({ monitoringStatus: 'paused' })
     } catch (exception) {
       setStopError(exception instanceof Error ? exception.message : 'Monitoring could not be stopped.')
     } finally {
@@ -257,9 +292,23 @@ export function LiveProjectReviewPage() {
     { label: 'Monitoring enabled', done: sseState === 'CONNECTED' && !monitoringPaused },
   ]
 
+  const tabList = [
+    ['overview', 'Overview'],
+    ['changes', 'Changes'],
+    ['problems', 'Problems'],
+    ['fixed', 'Fixed'],
+    ['requirements', 'Requirements'],
+    ['next', 'Next steps'],
+    ['intelligence', 'Failure intelligence'],
+  ] as const
+
   return (
     <div className="pr-command-center">
-      <span className={`pr-mode ${showcase ? 'showcase' : 'live'}`}>{showcase ? 'SHOWCASE MODE' : 'LIVE MODE'}</span>
+      <div className="pr-mode-banner">
+        <span className={`pr-mode ${showcase ? 'showcase' : 'live'}`}>
+          {showcase ? 'SHOWCASE MODE' : 'LIVE MODE'}
+        </span>
+      </div>
 
       <ProjectHeader
         projectName={projectName}
@@ -273,29 +322,54 @@ export function LiveProjectReviewPage() {
         stopping={stopping}
         onStop={stop}
       />
+
       {(stopError || analysisError || historyError) && (
         <p className="pr-error" role="alert">{stopError || analysisError || `Failure history unavailable: ${historyError}`}</p>
       )}
 
       {!onboardingDismissed && <OnboardingSteps steps={onboardingSteps} onDismiss={() => setOnboardingDismissed(true)} />}
 
-      <HealthCards cards={healthCards} />
+      {/* CATEGORY NAVIGATION TABS */}
+      <nav className="project-review-tabs" aria-label="Project review categories">
+        {tabList.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            className={activeTab === key ? 'active' : ''}
+            aria-current={activeTab === key ? 'page' : undefined}
+            onClick={() => setActiveTab(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
 
-      <div className="pr-grid">
-        <ProblemsSection findings={activeFindings} historyIndex={historyIndex} />
-        <ActivityFeed entries={activity} />
-        <RecommendationsSection recommendations={recommendations} />
-        <RequirementsSection projectId={projectId} refreshToken={refreshToken} />
-        <RecentlyFixed items={resolvedViews} />
+      {/* HEALTH CARDS: SHOWN ON OVERVIEW AND PROBLEMS */}
+      {(activeTab === 'overview' || activeTab === 'problems') && <HealthCards cards={healthCards} />}
+
+      <div className={`pr-grid project-review-view project-review-${activeTab}`}>
+        {activeTab === 'overview' && (
+          <>
+            <ProblemsSection findings={activeFindings.slice(0, 5)} historyIndex={historyIndex} />
+            <ActivityFeed entries={activity.slice(0, 8)} />
+            <RecommendationsSection recommendations={recommendations.slice(0, 5)} />
+          </>
+        )}
+        {activeTab === 'changes' && <ActivityFeed entries={activity} />}
+        {activeTab === 'problems' && <ProblemsSection findings={activeFindings} historyIndex={historyIndex} />}
+        {activeTab === 'fixed' && <RecentlyFixed items={resolvedViews} />}
+        {activeTab === 'requirements' && <RequirementsSection projectId={projectId} refreshToken={refreshToken} />}
+        {activeTab === 'next' && <RecommendationsSection recommendations={recommendations.slice(0, 5)} />}
+        {activeTab === 'intelligence' && (
+          <MistiqFailureIntelligence
+            projectId={projectId}
+            source={source}
+            sseState={sseState}
+            failureDna={failureDna}
+            refreshToken={refreshToken}
+          />
+        )}
       </div>
-
-      <MistiqFailureIntelligence
-        projectId={projectId}
-        source={source}
-        sseState={sseState}
-        failureDna={failureDna}
-        refreshToken={refreshToken}
-      />
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
-import { DashboardPage, LoginPage, MistakesPage, PracticePage, ProgressPage, ProfilePage, ResearchPage } from './pages/Pages'
+import { DashboardPage, LoginPage, MistakesPage, ProgressPage, ProfilePage, ResearchPage } from './pages/Pages'
 import { ProjectReviewHome } from './pages/ProjectReviewPage'
 import { ResearchLabPage } from './pages/ResearchLabPage'
 import { LiveProjectReviewPage } from './pages/LiveProjectReviewPage'
@@ -11,7 +11,6 @@ export default function App() {
     <Route element={<AppLayout />}>
     <Route path="/" element={<Navigate to="/dashboard" replace />} />
     <Route path="/dashboard" element={<DashboardPage />} />
-    <Route path="/practice" element={<PracticePage />} />
     <Route path="/progress" element={<ProgressPage />} />
     <Route path="/mistakes" element={<MistakesPage />} />
     <Route path="/profile" element={<ProfilePage />} />
