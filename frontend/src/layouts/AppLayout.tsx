@@ -15,6 +15,7 @@ import {
   SunIcon,
   MoonIcon,
   LaptopIcon,
+  SparklesIcon,
   UserIcon,
   GitBranchIcon,
   GitCommitIcon,
@@ -131,7 +132,9 @@ export function AppLayout() {
               onClick={() => setHeaderThemeDropdown(v => !v)}
               title={`Theme: ${preference} mode`}
             >
-              {preference === 'dark' ? (
+              {preference === 'purple' ? (
+                <SparklesIcon size={15} />
+              ) : preference === 'dark' ? (
                 <MoonIcon size={15} />
               ) : preference === 'light' ? (
                 <SunIcon size={15} />
@@ -142,7 +145,7 @@ export function AppLayout() {
 
             {headerThemeDropdown && (
               <div className="theme-dropdown-menu">
-                {(['light', 'dark', 'system'] as const).map(t => (
+                {(['purple', 'dark', 'light', 'system'] as const).map(t => (
                   <button
                     key={t}
                     type="button"
@@ -152,10 +155,11 @@ export function AppLayout() {
                       setHeaderThemeDropdown(false)
                     }}
                   >
+                    {t === 'purple' && <SparklesIcon size={13} className="inline mr-2" />}
                     {t === 'light' && <SunIcon size={13} className="inline mr-2" />}
                     {t === 'dark' && <MoonIcon size={13} className="inline mr-2" />}
                     {t === 'system' && <LaptopIcon size={13} className="inline mr-2" />}
-                    <span className="capitalize">{t} Mode</span>
+                    <span className="capitalize">{t === 'purple' ? 'Purple Glass' : `${t} Mode`}</span>
                   </button>
                 ))}
               </div>
@@ -235,7 +239,9 @@ export function AppLayout() {
                 aria-label={`Switch theme appearance (currently ${preference})`}
               >
                 <span className="nav-icon">
-                  {preference === 'dark' ? (
+                  {preference === 'purple' ? (
+                    <SparklesIcon size={16} />
+                  ) : preference === 'dark' ? (
                     <MoonIcon size={16} />
                   ) : preference === 'light' ? (
                     <SunIcon size={16} />
@@ -244,12 +250,12 @@ export function AppLayout() {
                   )}
                 </span>
                 <span className="nav-label">Appearance</span>
-                <span className="sidebar-theme-current capitalize">{preference}</span>
+                <span className="sidebar-theme-current capitalize">{preference === 'purple' ? 'Purple' : preference}</span>
               </button>
 
               {sidebarThemeDropdown && (
                 <div className="sidebar-theme-menu">
-                  {(['light', 'dark', 'system'] as const).map(t => (
+                  {(['purple', 'dark', 'light', 'system'] as const).map(t => (
                     <button
                       key={t}
                       type="button"
@@ -259,14 +265,16 @@ export function AppLayout() {
                         setSidebarThemeDropdown(false)
                       }}
                     >
-                      {t === 'light' ? (
+                      {t === 'purple' ? (
+                        <SparklesIcon size={13} className="mr-1 inline" />
+                      ) : t === 'light' ? (
                         <SunIcon size={13} className="mr-1 inline" />
                       ) : t === 'dark' ? (
                         <MoonIcon size={13} className="mr-1 inline" />
                       ) : (
                         <LaptopIcon size={13} className="mr-1 inline" />
                       )}
-                      <span className="capitalize">{t}</span>
+                      <span className="capitalize">{t === 'purple' ? 'Purple' : t}</span>
                     </button>
                   ))}
                 </div>

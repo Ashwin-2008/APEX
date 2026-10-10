@@ -14,6 +14,7 @@ import {
   SunIcon,
   MoonIcon,
   LaptopIcon,
+  SparklesIcon,
   FolderIcon,
   GithubIcon,
   GitBranchIcon,
@@ -243,6 +244,19 @@ export function ProfileSettingsPage() {
               <strong className="theme-option-name">Dark Mode</strong>
               <span className="theme-option-sub">Data-dense deep slate palette for engineering focus</span>
               {preference === 'dark' && <span className="theme-selected-check">✓ Active</span>}
+            </button>
+
+            <button
+              type="button"
+              className={`theme-option-card card interactive-card ${preference === 'purple' ? 'selected' : ''}`}
+              onClick={() => setPreference('purple')}
+            >
+              <div className="theme-option-icon">
+                <SparklesIcon size={20} className="text-primary" />
+              </div>
+              <strong className="theme-option-name">Purple Glass</strong>
+              <span className="theme-option-sub">Deep plum glassmorphism with layered translucent surfaces and ambient glow</span>
+              {preference === 'purple' && <span className="theme-selected-check">✓ Active</span>}
             </button>
 
             <button

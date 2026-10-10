@@ -1,6 +1,6 @@
 # MISTIQ-APR Research Report
 
-Generated: 2026-10-09T12:22:12+00:00
+Generated: 2026-10-09T12:44:16+00:00
 
 ## Research question
 Can the trajectory of software engineering failures predict the next project
@@ -10,8 +10,8 @@ failure category better than static project-quality metrics?
 There are not enough real chronological review transitions for a rigorous evaluation. No accuracy is reported because none has been measured.
 
 ## Dataset status
-- Projects: 2
-- Reviews: 3
+- Projects: 3
+- Reviews: 4
 - Transitions: 1
 - Training observations: 4
 - Failure categories observed: 4
@@ -74,7 +74,7 @@ No model artifact was written.
 Reason: walk-forward evaluation is unavailable.
 
 ## Limitations, sample size, and confidence
-- Sample size: 4 chronological observations across 2 project(s) and 3 review(s).
+- Sample size: 4 chronological observations across 3 project(s) and 4 review(s).
 Confidence: none - no evaluation has been performed, so no performance confidence can be stated.
 MISTIQ-APR is a project-specific sequential failure-prediction framework adapted
 from the MISTIQ mistake-intelligence architecture. It is not claimed as a newly

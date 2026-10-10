@@ -1,6 +1,6 @@
 # MISTIQ-APR Ablation Report
 
-Generated: 2026-10-09T12:22:12+00:00
+Generated: 2026-10-09T12:44:16+00:00
 
 Protocol: walk-forward temporal evaluation (features removed one group at a time,
 retrained on the same expanding chronological cutoffs as the full model).

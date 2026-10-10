@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 
-export type ThemePreference = 'light' | 'dark' | 'system'
+export type ThemePreference = 'light' | 'dark' | 'purple' | 'system'
 
 interface ThemeContextValue {
   preference: ThemePreference
@@ -12,7 +12,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 
 function readPreference(): ThemePreference {
   const value = localStorage.getItem(STORAGE_KEY)
-  return value === 'dark' || value === 'light' || value === 'system' ? value : 'system'
+  return value === 'dark' || value === 'light' || value === 'purple' || value === 'system' ? value : 'system'
 }
 
 function systemPrefersDark(): boolean {
@@ -24,8 +24,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const root = document.documentElement
-    const dark = preference === 'dark' || (preference === 'system' && systemPrefersDark())
-    root.dataset.theme = dark ? 'dark' : 'light'
+    if (preference === 'purple') {
+      root.dataset.theme = 'purple'
+    } else if (preference === 'dark') {
+      root.dataset.theme = 'dark'
+    } else if (preference === 'light') {
+      root.dataset.theme = 'light'
+    } else {
+      root.dataset.theme = systemPrefersDark() ? 'dark' : 'light'
+    }
     localStorage.setItem(STORAGE_KEY, preference)
   }, [preference])
 
