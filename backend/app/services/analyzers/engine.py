@@ -9,6 +9,9 @@ from typing import Any
 from app.services.analyzers.api_analyzer import run_api_analysis
 from app.services.analyzers.architecture_analyzer import run_architecture_analysis
 from app.services.analyzers.code_intel_analyzer import run_code_intelligence_analysis
+from app.services.analyzers.type_engine import run_type_intelligence_analysis
+from app.services.analyzers.resource_concurrency_analyzer import run_resource_concurrency_analysis
+from app.services.analyzers.trace_engine import DynamicTraceReconciler
 from app.services.analyzers.base import AnalyzerOutput, AnalyzerStatus, FindingItem
 from app.services.analyzers.config_analyzer import run_config_analysis
 from app.services.analyzers.database_analyzer import run_database_analysis
@@ -35,7 +38,8 @@ def run_comprehensive_analysis(
 
     # 2. Selected analyzer set
     selected = set(enabled_analyzers or [
-        "security", "dependency", "testing", "architecture", "database", "configuration", "api", "code_intelligence"
+        "security", "dependency", "testing", "architecture", "database", "configuration", "api", "code_intelligence",
+        "type_intelligence", "resource_concurrency"
     ])
 
     analyzer_results: dict[str, AnalyzerOutput] = {}
@@ -88,6 +92,36 @@ def run_comprehensive_analysis(
         intel_out = run_code_intelligence_analysis(root)
         analyzer_results["code_intelligence"] = intel_out
         all_findings.extend(intel_out.findings)
+
+    # Run Type Intelligence Analyzer (None-Safety & PEP 484 Type Inspection)
+    if "type_intelligence" in selected:
+        t_start = time.perf_counter()
+        type_findings, type_metrics, _ = run_type_intelligence_analysis(root)
+        analyzer_results["type_intelligence"] = AnalyzerOutput(
+            analyzer_name="type_intelligence",
+            status=AnalyzerStatus.COMPLETE,
+            findings=type_findings,
+            metrics=type_metrics,
+            duration_ms=(time.perf_counter() - t_start) * 1000,
+        )
+        all_findings.extend(type_findings)
+
+    # Run Resource & Concurrency Analyzer (Resource Leaks & Event Loop Safety)
+    if "resource_concurrency" in selected:
+        rc_start = time.perf_counter()
+        rc_findings, rc_metrics = run_resource_concurrency_analysis(root)
+        analyzer_results["resource_concurrency"] = AnalyzerOutput(
+            analyzer_name="resource_concurrency",
+            status=AnalyzerStatus.COMPLETE,
+            findings=rc_findings,
+            metrics=rc_metrics,
+            duration_ms=(time.perf_counter() - rc_start) * 1000,
+        )
+        all_findings.extend(rc_findings)
+
+    # Reconcile findings with Dynamic Runtime Traces & Test Failures
+    reconciler = DynamicTraceReconciler(root)
+    all_findings = reconciler.reconcile_findings(all_findings)
 
     # Run Dynamic Analyzer (opt-in)
     if "dynamic" in selected or run_dynamic:

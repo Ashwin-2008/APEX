@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 import subprocess
 from pathlib import Path
+from typing import Any
 from pydantic import BaseModel, Field
 from urllib.parse import urlparse
 
@@ -459,14 +460,47 @@ class IngestionRunRequest(BaseModel):
     dataset_version: str = "v001"
 
 
-@router.get("/{project_id}/code-intelligence", summary="Line-by-line AST indexing and evidence-based risk localization")
+@router.get("/{project_id}/code-intelligence", summary="Line-by-line AST indexing, type-safety, and runtime intelligence")
 def code_intelligence_report(project_id: int, request: Request):
     with request.app.state.SessionLocal() as session:
-        _check_project_access(session, project_id, request)
+        project = _check_project_access(session, project_id, request)
         try:
-            return project_code_intelligence(session, project_id)
+            base_data = project_code_intelligence(session, project_id)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+        repo_path = Path(project.repository_path)
+        if repo_path.is_dir():
+            from app.services.analyzers.type_engine import run_type_intelligence_analysis
+            from app.services.analyzers.resource_concurrency_analyzer import run_resource_concurrency_analysis
+            from app.services.analyzers.trace_engine import DynamicTraceReconciler
+
+            type_findings, type_metrics, _ = run_type_intelligence_analysis(repo_path)
+            rc_findings, rc_metrics = run_resource_concurrency_analysis(repo_path)
+            reconciler = DynamicTraceReconciler(repo_path)
+
+            base_data["type_intelligence"] = {
+                "metrics": type_metrics,
+                "findings": [f.to_dict() for f in type_findings],
+            }
+            base_data["resource_concurrency"] = {
+                "metrics": rc_metrics,
+                "findings": [f.to_dict() for f in rc_findings],
+            }
+            base_data["dynamic_traces"] = {
+                "executed_files_count": len(reconciler.executed_lines),
+                "test_failures_count": len(reconciler.test_failures),
+                "failures": [
+                    {
+                        "test_name": tf.test_name,
+                        "message": tf.message,
+                        "failure_type": tf.failure_type,
+                        "stack_frames": [{"file": f.file_path, "line": f.line_number, "function": f.function_name} for f in tf.stack_frames],
+                    }
+                    for tf in reconciler.test_failures
+                ],
+            }
+        return base_data
 
 
 @router.get("/{project_id}/architecture-graph", summary="Repository-wide architecture dependency graph, cycles, and metrics")
@@ -553,4 +587,556 @@ def ingestion_run_report(body: IngestionRunRequest, request: Request):
             dataset_version=body.dataset_version,
         )
 
+
+
+
+# --- PHASE 2C: DETECTION INTELLIGENCE & EVIDENCE VALIDATION ENDPOINTS ---
+
+class FeedbackSubmissionRequest(BaseModel):
+    classification: str
+    justification: str
+
+
+@router.get("/{project_id}/intelligence", summary="Unified finding intelligence, correlation, root cause, and priority summary")
+def intelligence_summary_report(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist on disk.")
+
+        from app.services.analyzers.engine import run_comprehensive_analysis
+        from app.services.intelligence.evidence_validator import EvidenceValidator
+        from app.services.intelligence.finding_correlator import FindingCorrelator
+        from app.services.intelligence.confidence_engine import ConfidenceCalibrator
+        from app.services.intelligence.root_cause_engine import RootCauseAnalyzer
+        from app.services.intelligence.prioritization_engine import RiskPrioritizer
+
+        comp = run_comprehensive_analysis(repo_path)
+        raw_findings = comp.get("findings", [])
+
+        validator = EvidenceValidator(repo_path, current_commit=project.current_commit_sha)
+        correlator = FindingCorrelator()
+        correlator.correlate(raw_findings)
+        deduped, clusters = correlator.deduplicate_multi_stage(raw_findings)
+
+        root_causes = RootCauseAnalyzer.analyze(deduped)
+
+        priorities = []
+        validated_findings = []
+        for f in deduped:
+            v_state, ev_items = validator.validate_finding(f)
+            conf = ConfidenceCalibrator.calibrate(f, ev_items, v_state)
+            prio = RiskPrioritizer.prioritize(f, conf.level)
+            f_copy = dict(f)
+            f_copy["validation_state"] = v_state.value
+            f_copy["calibrated_confidence"] = conf.to_dict()
+            f_copy["remediation_priority"] = prio.to_dict()
+            priorities.append(prio.to_dict())
+            validated_findings.append(f_copy)
+
+        return {
+            "project_id": project_id,
+            "total_findings": len(validated_findings),
+            "findings": validated_findings,
+            "relationships": [r.to_dict() for r in correlator.relationships],
+            "correlation_clusters": [c.to_dict() for c in clusters],
+            "root_causes": [rc.to_dict() for rc in root_causes],
+            "risk_priorities": priorities,
+        }
+
+
+@router.get("/{project_id}/findings/{finding_id}/evidence", summary="Inspect verified ground-truth evidence items for a specific finding")
+def finding_evidence_report(project_id: int, finding_id: str, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.services.intelligence.evidence_validator import EvidenceValidator
+
+        # Query finding from DB if present
+        finding_dict = None
+        if finding_id.isdigit():
+            db_f = session.get(ProjectFinding, int(finding_id))
+            if db_f and db_f.review and db_f.review.project_id == project_id:
+                from app.services.finding_service import serialize_finding
+                finding_dict = serialize_finding(db_f)
+        if not finding_dict:
+            # Check by fingerprint
+            db_f = session.scalar(
+                select(ProjectFinding).join(ProjectReview).where(
+                    ProjectReview.project_id == project_id,
+                    ProjectFinding.fingerprint == finding_id,
+                )
+            )
+            if db_f:
+                from app.services.finding_service import serialize_finding
+                finding_dict = serialize_finding(db_f)
+
+        if not finding_dict:
+            # Fallback to current workspace scan
+            from app.services.analyzers.engine import run_comprehensive_analysis
+            comp = run_comprehensive_analysis(repo_path)
+            finding_dict = next((f for f in comp.get("findings", []) if (f.get("fingerprint") == finding_id or f.get("rule_id") == finding_id)), None)
+
+        if not finding_dict:
+            raise HTTPException(status_code=404, detail="Finding not found for this project.")
+
+        validator = EvidenceValidator(repo_path, current_commit=project.current_commit_sha)
+        v_state, ev_items = validator.validate_finding(finding_dict, finding_id=finding_id)
+
+        from app.services.intelligence.confidence_engine import ConfidenceCalibrator
+        conf = ConfidenceCalibrator.calibrate(finding_dict, ev_items, v_state)
+
+        return {
+            "finding_id": finding_id,
+            "validation_state": v_state.value,
+            "calibrated_confidence": conf.to_dict(),
+            "evidence_items": [e.to_dict() for e in ev_items],
+        }
+
+
+@router.get("/{project_id}/findings/{finding_id}/relationships", summary="Inspect cross-analyzer relationships for a finding")
+def finding_relationships_report(project_id: int, finding_id: str, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.services.analyzers.engine import run_comprehensive_analysis
+        from app.services.intelligence.finding_correlator import FindingCorrelator
+
+        comp = run_comprehensive_analysis(repo_path)
+        correlator = FindingCorrelator()
+        correlator.correlate(comp.get("findings", []))
+
+        related = [
+            r.to_dict() for r in correlator.relationships
+            if r.source_finding_id == finding_id or r.target_finding_id == finding_id
+        ]
+        return {
+            "finding_id": finding_id,
+            "relationships_count": len(related),
+            "relationships": related,
+        }
+
+
+@router.get("/{project_id}/root-causes", summary="Synthesized root causes underlying multiple project findings")
+def root_causes_report(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.services.analyzers.engine import run_comprehensive_analysis
+        from app.services.intelligence.root_cause_engine import RootCauseAnalyzer
+
+        comp = run_comprehensive_analysis(repo_path)
+        root_causes = RootCauseAnalyzer.analyze(comp.get("findings", []))
+        return {
+            "project_id": project_id,
+            "root_causes_count": len(root_causes),
+            "root_causes": [rc.to_dict() for rc in root_causes],
+        }
+
+
+@router.get("/{project_id}/regressions", summary="Track finding regressions and resolutions across commits")
+def regressions_report(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.services.analyzers.engine import run_comprehensive_analysis
+        from app.services.intelligence.regression_engine import RegressionTracker
+        from app.services.finding_service import serialize_finding
+
+        comp = run_comprehensive_analysis(repo_path)
+        current_findings = comp.get("findings", [])
+
+        # Fetch historical findings from database
+        hist_rows = session.scalars(
+            select(ProjectFinding).join(ProjectReview).where(ProjectReview.project_id == project_id)
+        ).all()
+        hist_serialized = [serialize_finding(r) for r in hist_rows]
+
+        regressions = RegressionTracker.evaluate_regressions(
+            current_findings=current_findings,
+            historical_findings=hist_serialized,
+            current_commit=project.current_commit_sha,
+        )
+        return {
+            "project_id": project_id,
+            "current_commit": project.current_commit_sha,
+            "regressions_count": len(regressions),
+            "regressions": [r.to_dict() for r in regressions],
+        }
+
+
+@router.get("/{project_id}/risk-priorities", summary="Multi-dimensional remediation priorities (P0-P3)")
+def risk_priorities_report(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.services.analyzers.engine import run_comprehensive_analysis
+        from app.services.intelligence.prioritization_engine import RiskPrioritizer
+
+        comp = run_comprehensive_analysis(repo_path)
+        priorities = [
+            RiskPrioritizer.prioritize(f).to_dict()
+            for f in comp.get("findings", [])
+        ]
+        return {
+            "project_id": project_id,
+            "priorities_count": len(priorities),
+            "priorities": priorities,
+        }
+
+
+@router.post("/{project_id}/findings/{finding_id}/feedback", summary="Submit auditable review decision and false-positive feedback")
+def submit_feedback_report(project_id: int, finding_id: str, body: FeedbackSubmissionRequest, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+
+        # Resolve user_id from token
+        user_id = project.owner_id or 1
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            from app.services.auth_service import decode_access_token
+            payload = decode_access_token(auth_header[7:].strip())
+            if payload:
+                user_id = payload.get("sub", user_id)
+
+        # Validate finding belongs to project
+        db_f = None
+        if finding_id.isdigit():
+            db_f = session.get(ProjectFinding, int(finding_id))
+            if db_f and db_f.review and db_f.review.project_id != project_id:
+                raise HTTPException(status_code=404, detail="Finding does not belong to this project.")
+
+        from app.services.intelligence.false_positive_engine import feedback_manager
+        try:
+            item = feedback_manager.record_feedback(
+                project_id=project_id,
+                user_id=user_id,
+                finding_id=finding_id,
+                rule_id=db_f.rule_id if db_f and hasattr(db_f, "rule_id") else (db_f.category if db_f else "RULE"),
+                analyzer_source=db_f.analyzer_source if db_f else "manual_review",
+                file=db_f.file if db_f else None,
+                evidence=db_f.evidence if db_f else body.justification,
+                classification=body.classification,
+                justification=body.justification,
+                commit_sha=project.current_commit_sha,
+            )
+            # Sync to suppression if false positive or accepted risk
+            if db_f and body.classification in {"CONFIRMED_FALSE_POSITIVE", "ACCEPTED_RISK", "WONT_FIX"}:
+                from app.services.finding_service import suppress_finding
+                suppress_finding(session, db_f.id, user_id, body.justification, body.classification.lower())
+
+            return {
+                "status": "recorded",
+                "feedback": item.to_dict(),
+            }
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+class GenerateFixRequest(BaseModel):
+    custom_finding: dict[str, Any] | None = None
+
+
+@router.post("/{project_id}/findings/{finding_id}/generate-fix", summary="Synthesize deterministic or AI-grounded verified code patch for a finding")
+def generate_fix_report(project_id: int, finding_id: str, request: Request, body: GenerateFixRequest | None = None):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.models.entities import ProjectFinding
+        from app.services.remediation import (
+            PatchGenerator,
+            PatchIntegrityService,
+            PatchVerifier,
+            SemanticVerifier,
+            global_patch_manager,
+        )
+
+        finding_dict = None
+        if body and body.custom_finding:
+            finding_dict = body.custom_finding
+
+        if not finding_dict:
+            if finding_id.isdigit():
+                db_f = session.get(ProjectFinding, int(finding_id))
+                if db_f and db_f.review and db_f.review.project_id == project_id:
+                    from app.services.finding_service import serialize_finding
+                    finding_dict = serialize_finding(db_f)
+            if not finding_dict:
+                db_f = session.scalar(
+                    select(ProjectFinding).join(ProjectReview).where(
+                        ProjectReview.project_id == project_id,
+                        ProjectFinding.fingerprint == finding_id,
+                    )
+                )
+                if db_f:
+                    from app.services.finding_service import serialize_finding
+                    finding_dict = serialize_finding(db_f)
+
+        if not finding_dict:
+            from app.services.intelligence.evidence_validator import run_comprehensive_analysis
+            comp = run_comprehensive_analysis(repo_path)
+            for f in comp.get("findings", []):
+                if str(f.get("fingerprint")) == finding_id or str(f.get("rule_id")) == finding_id:
+                    finding_dict = f
+                    break
+
+        if not finding_dict:
+            raise HTTPException(status_code=404, detail="Finding not found for fix generation.")
+
+        patch = PatchGenerator.generate_patch(finding_dict, repo_path)
+        if not patch:
+            raise HTTPException(status_code=422, detail="Unable to synthesize patch for finding.")
+
+        # Read original code for cryptographic provenance & semantic verification
+        target_file = repo_path / patch.file
+        orig_code = target_file.read_text(encoding="utf-8", errors="ignore") if target_file.is_file() else ""
+        patched_code = patch.patched_full_content or orig_code
+
+        # AST syntax & flaw elimination check
+        verification = PatchVerifier.verify_patch(patch, repo_root=repo_path, original_code=orig_code)
+
+        # Cryptographic provenance binding
+        provenance = PatchIntegrityService.generate_provenance(
+            patch=patch,
+            original_code=orig_code,
+            patched_code=patched_code,
+            project_id=project_id,
+            repo_revision=project.current_commit_sha,
+        )
+
+        # Semantic contract & control-flow verification
+        semantic_res = SemanticVerifier.verify_semantics(
+            original_code=orig_code,
+            patched_code=patched_code,
+            rule_id=patch.rule_id,
+            expected_strategy=patch.strategy.value,
+        )
+
+        record = global_patch_manager.register_patch(
+            patch=patch,
+            verification=verification,
+            provenance=provenance,
+            semantic_verification=semantic_res,
+        )
+
+        return {
+            "patch": patch.to_dict(),
+            "verification": verification.to_dict(),
+            "provenance": provenance.to_dict(),
+            "semantic_verification": semantic_res.to_dict(),
+            "record": record.to_dict(),
+        }
+
+
+@router.post("/{project_id}/patches/{patch_id}/apply", summary="Apply verified code patch with automated backup snapshot")
+def apply_patch_report(project_id: int, patch_id: str, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.services.remediation import PostApplyVerifier, global_patch_manager
+
+        success, msg = global_patch_manager.apply_patch(patch_id, repo_path)
+        if not success:
+            raise HTTPException(status_code=400, detail=msg)
+
+        record = global_patch_manager.get_patch_record(patch_id)
+        if record:
+            # Run automatic post-apply flaw reanalysis
+            post_res = PostApplyVerifier.verify_application(repo_path, record.patch)
+            record.post_apply_verification = post_res.to_dict()
+
+        return {
+            "success": True,
+            "message": msg,
+            "patch_record": record.to_dict() if record else None,
+        }
+
+
+@router.post("/{project_id}/patches/{patch_id}/rollback", summary="Roll back applied code patch from pre-modification backup snapshot")
+def rollback_patch_report(project_id: int, patch_id: str, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.services.remediation import global_patch_manager
+
+        success, msg = global_patch_manager.rollback_patch(patch_id, repo_path)
+        if not success:
+            if "ROLLBACK_CONFLICT" in msg:
+                raise HTTPException(status_code=409, detail=msg)
+            raise HTTPException(status_code=400, detail=msg)
+
+        record = global_patch_manager.get_patch_record(patch_id)
+        return {
+            "success": True,
+            "message": msg,
+            "patch_record": record.to_dict() if record else None,
+        }
+
+
+@router.get("/{project_id}/patches/{patch_id}/provenance", summary="Retrieve cryptographic provenance and SHA-256 digests for a patch")
+def patch_provenance_report(project_id: int, patch_id: str, request: Request):
+    with request.app.state.SessionLocal() as session:
+        _check_project_access(session, project_id, request)
+        from app.services.remediation import global_patch_manager
+
+        record = global_patch_manager.get_patch_record(patch_id)
+        if not record or (record.provenance and record.provenance.project_id != project_id):
+            raise HTTPException(status_code=404, detail="Patch provenance not found for this project.")
+
+        return {
+            "patch_id": patch_id,
+            "provenance": record.provenance.to_dict() if record.provenance else None,
+            "state": record.state.value,
+        }
+
+
+@router.get("/{project_id}/patches/{patch_id}/verification", summary="Retrieve transparent multi-dimensional patch confidence assessment")
+def patch_verification_report(project_id: int, patch_id: str, request: Request):
+    with request.app.state.SessionLocal() as session:
+        _check_project_access(session, project_id, request)
+        from app.services.remediation import PatchConfidenceEngine, global_patch_manager
+
+        record = global_patch_manager.get_patch_record(patch_id)
+        if not record or (record.provenance and record.provenance.project_id != project_id):
+            raise HTTPException(status_code=404, detail="Patch not found for this project.")
+
+        report = PatchConfidenceEngine.evaluate_patch(record)
+        return report.to_dict()
+
+
+@router.get("/{project_id}/patches/{patch_id}/history", summary="Retrieve complete auditable lifecycle timeline for a patch")
+def patch_history_report(project_id: int, patch_id: str, request: Request):
+    with request.app.state.SessionLocal() as session:
+        _check_project_access(session, project_id, request)
+        from app.services.remediation import global_patch_manager
+
+        record = global_patch_manager.get_patch_record(patch_id)
+        if not record or (record.provenance and record.provenance.project_id != project_id):
+            raise HTTPException(status_code=404, detail="Patch not found for this project.")
+
+        return {
+            "patch_id": patch_id,
+            "state": record.state.value,
+            "audit_trail": [a.to_dict() for a in record.audit_trail],
+        }
+
+
+@router.post("/{project_id}/patches/{patch_id}/verify-semantic", summary="Execute deep AST semantic and function contract verification")
+def verify_patch_semantic_report(project_id: int, patch_id: str, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.services.remediation import SemanticVerifier, global_patch_manager
+
+        record = global_patch_manager.get_patch_record(patch_id)
+        if not record or (record.provenance and record.provenance.project_id != project_id):
+            raise HTTPException(status_code=404, detail="Patch not found for this project.")
+
+        target_file = repo_path / record.patch.file
+        orig_code = target_file.read_text(encoding="utf-8", errors="ignore") if target_file.is_file() else ""
+        patched_code = record.patch.patched_full_content or orig_code
+
+        res = SemanticVerifier.verify_semantics(
+            original_code=orig_code,
+            patched_code=patched_code,
+            rule_id=record.patch.rule_id,
+            expected_strategy=record.patch.strategy.value,
+        )
+        record.semantic_verification = res
+        return res.to_dict()
+
+
+@router.post("/{project_id}/patches/{patch_id}/verify-behavioral", summary="Execute isolated behavioral regression tests against candidate patch")
+def verify_patch_behavioral_report(project_id: int, patch_id: str, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.services.remediation import BehavioralVerifier, global_patch_manager
+
+        record = global_patch_manager.get_patch_record(patch_id)
+        if not record or (record.provenance and record.provenance.project_id != project_id):
+            raise HTTPException(status_code=404, detail="Patch not found for this project.")
+
+        target_file = repo_path / record.patch.file
+        orig_code = target_file.read_text(encoding="utf-8", errors="ignore") if target_file.is_file() else ""
+        patched_code = record.patch.patched_full_content or orig_code
+
+        beh_res = BehavioralVerifier.verify_patch_behavior(repo_path, record.patch, patched_code)
+        record.behavioral_verification = beh_res.to_dict()
+        return beh_res.to_dict()
+
+
+@router.post("/{project_id}/patches/{patch_id}/post-apply-verify", summary="Re-run specialized analyzer on disk to confirm flaw elimination")
+def post_apply_verify_report(project_id: int, patch_id: str, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.services.remediation import PostApplyVerifier, global_patch_manager
+
+        record = global_patch_manager.get_patch_record(patch_id)
+        if not record or (record.provenance and record.provenance.project_id != project_id):
+            raise HTTPException(status_code=404, detail="Patch not found for this project.")
+
+        res = PostApplyVerifier.verify_application(repo_path, record.patch)
+        record.post_apply_verification = res.to_dict()
+        return res.to_dict()
+
+
+@router.get("/{project_id}/patches/stale-check", summary="Check all registered patches in project for stale source files")
+def check_patches_stale_report(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.services.remediation import PatchIntegrityService, global_patch_manager
+
+        records = global_patch_manager.list_patches_for_project(project_id)
+        results = []
+        for r in records:
+            if r.provenance:
+                is_valid, msg, code = PatchIntegrityService.check_integrity(r.provenance, r.patch, repo_path)
+                results.append({
+                    "patch_id": r.patch.patch_id,
+                    "file": r.patch.file,
+                    "is_stale": code == "STALE_PATCH",
+                    "status_code": code,
+                    "message": msg,
+                })
+        return {"project_id": project_id, "checks": results}
 

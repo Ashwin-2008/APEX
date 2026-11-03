@@ -15,6 +15,7 @@ from typing import Any
 
 from app.services.analyzers.base import FindingItem
 from app.services.analyzers.repository_graph import RepositorySymbolIndex, SymbolDefinition
+from app.services.analyzers.type_engine import is_safe_injection_type, stringify_annotation
 
 MAX_CALL_DEPTH = 6
 
@@ -120,10 +121,22 @@ class InterproceduralTaintAnalyzer:
 
             for node in ast.walk(tree):
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == sym.name:
+                    # Type-informed safety check: exclude parameters annotated with safe non-string types (int, float, bool, UUID)
+                    safe_params = set()
+                    for arg in node.args.args:
+                        if arg.annotation:
+                            ann_str = stringify_annotation(arg.annotation)
+                            if is_safe_injection_type(ann_str):
+                                safe_params.add(arg.arg)
+                    has_request_obj = any(p in {"request", "req"} for p in sym.parameters)
+                    active_sources = [p for p in sources if p not in safe_params]
+                    if not active_sources and not has_request_obj:
+                        continue
+
                     self._trace_function(
                         func_node=node,
                         sym=sym,
-                        initial_taints=set(sources),
+                        initial_taints=set(active_sources),
                         depth=0,
                         call_stack=[sym.qname],
                         trace_steps=[
@@ -132,7 +145,7 @@ class InterproceduralTaintAnalyzer:
                                 file=sym.file_path,
                                 line=sym.start_line,
                                 symbol=sym.name,
-                                expression=f"Endpoint parameter(s): {', '.join(sources) or 'request'}",
+                                expression=f"Endpoint parameter(s): {', '.join(active_sources) or 'request'}",
                                 role="source",
                             )
                         ],

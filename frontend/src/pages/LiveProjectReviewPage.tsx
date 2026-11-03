@@ -430,6 +430,7 @@ export function LiveProjectReviewPage() {
             <ProblemsSection
               findings={activeFindings.slice(0, 5)}
               historyIndex={historyIndex}
+              projectId={projectId}
               onSuppress={handleOpenSuppress}
             />
             <ActivityFeed entries={activity.slice(0, 8)} />
@@ -441,6 +442,7 @@ export function LiveProjectReviewPage() {
           <ProblemsSection
             findings={activeFindings}
             historyIndex={historyIndex}
+            projectId={projectId}
             onSuppress={handleOpenSuppress}
           />
         )}

@@ -167,6 +167,7 @@ class ReviewedProject(Base):
     reviews: Mapped[list["ProjectReview"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     notifications: Mapped[list["Notification"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     activity_events: Mapped[list["ActivityEvent"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    remediation_transactions: Mapped[list["RemediationTransaction"]] = relationship(back_populates="project", cascade="all, delete-orphan")
 
 
 class ProjectReview(Base):
@@ -279,3 +280,32 @@ class ActivityEvent(Base):
     event_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     project: Mapped[ReviewedProject] = relationship(back_populates="activity_events")
+
+
+class RemediationTransaction(Base):
+    __tablename__ = "remediation_transactions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    transaction_id: Mapped[str] = mapped_column(String(80), unique=True, index=True, nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    state: Mapped[str] = mapped_column(String(50), nullable=False, default="PREPARED")
+    files_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    manifest: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    journal: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    post_verification: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    project: Mapped[ReviewedProject] = relationship(back_populates="remediation_transactions")
+
+
+class RemediationLockRecord(Base):
+    __tablename__ = "remediation_locks"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), unique=True, index=True, nullable=False)
+    transaction_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    acquired_by: Mapped[str] = mapped_column(String(120), nullable=False)
+    lease_expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    project: Mapped[ReviewedProject] = relationship()
