@@ -1,0 +1,67 @@
+{
+  "artifacts": {
+    "dataset_jsonl": "C:\\Users\\ASHWIN\\Downloads\\PROJECTS\\MISTIQ\\MISTIQ\\backend\\ml\\artifacts\\datasets\\dataset_v001.jsonl",
+    "exclusions_json": "C:\\Users\\ASHWIN\\Downloads\\PROJECTS\\MISTIQ\\MISTIQ\\backend\\ml\\artifacts\\datasets\\exclusions_v001.json",
+    "repository_manifest": "C:\\Users\\ASHWIN\\Downloads\\PROJECTS\\MISTIQ\\MISTIQ\\backend\\ml\\artifacts\\datasets\\repository_manifest.jsonl"
+  },
+  "category_distribution": {
+    "architecture": 15,
+    "configuration": 3,
+    "data_integrity": 9,
+    "dependency": 10,
+    "deployment": 5,
+    "error_handling": 10,
+    "requirements": 7,
+    "security": 61,
+    "testing": 9
+  },
+  "completed_at": "2026-10-28T16:21:19.933086+00:00",
+  "curated_observations_count": 129,
+  "data_category_distribution": {
+    "analyzer_detected_risk": 37,
+    "historical_failure_transition": 3,
+    "verified_defect_example": 89
+  },
+  "dataset_sha256": "acd35af540be42a38b5942016aeb8e8c644ac083f64e03cca2dd11e21d74d4b0",
+  "dataset_version": "v001",
+  "discovered_git_repositories": 14,
+  "distinct_failure_categories": 9,
+  "distinct_repository_groups_in_dataset": 9,
+  "duplicate_observations_removed": 0,
+  "eligible_git_repositories": 9,
+  "exclusions_count": 5,
+  "label_confidence_distribution": {
+    "high_gte_0_8": 92,
+    "low_lt_0_5": 0,
+    "medium_0_5_to_0_8": 37
+  },
+  "language_distribution": {
+    "javascript": 35,
+    "python": 75,
+    "typescript": 15,
+    "unknown": 4
+  },
+  "raw_observations_generated": 129,
+  "repository_groups": [
+    "repo:c:/users/ashwin/downloads/projects/codenova/task1 - codenova-notes-api",
+    "repo:c:/users/ashwin/downloads/projects/codenova/task2 - codenova-task-management-api",
+    "repo:c:/users/ashwin/downloads/projects/edumentor",
+    "repo:c:/users/ashwin/downloads/projects/mistiq",
+    "repo:c:/users/ashwin/downloads/projects/portfolio",
+    "repo:c:/users/ashwin/downloads/projects/pravaha",
+    "repo:c:/users/ashwin/downloads/projects/sakshadatathon",
+    "repo:c:/users/ashwin/downloads/projects/salesstorm",
+    "repo:c:/users/ashwin/downloads/projects/tetravateportfolio/portfolio"
+  ],
+  "schema_version": "1.0.0",
+  "secret_redactions_applied": 61,
+  "started_at": "2026-10-28T16:20:54.502170+00:00",
+  "status": "READY",
+  "supported_collection_targets": [
+    100,
+    500,
+    1000,
+    5000
+  ],
+  "target_repository_count": 100
+}

@@ -122,7 +122,7 @@ describe('MISTIQ-APR failure intelligence panel', () => {
   it('shows STATE B with observed requirements and no invented prediction', async () => {
     setup({ status: statusOf(), prediction: unavailablePrediction })
     expect(await screen.findByText('B · FAILURE HISTORY EXISTS · MODEL NOT TRAINED')).toBeTruthy()
-    expect(screen.getByText(/but no trained MISTIQ-APR model is available for this dataset, so next-failure prediction is withheld rather than guessed/)).toBeTruthy()
+    expect(screen.getByText(/but no trained (MISTIQ-APR|Apex-APR) model is available for this dataset, so next-failure prediction is withheld rather than guessed/)).toBeTruthy()
     expect(screen.getByText(/Training observations:/)).toBeTruthy()
     expect(screen.getByText(/of 10 required — 6 more needed/)).toBeTruthy()
     expect(screen.getByText(/Distinct failure categories:/)).toBeTruthy()

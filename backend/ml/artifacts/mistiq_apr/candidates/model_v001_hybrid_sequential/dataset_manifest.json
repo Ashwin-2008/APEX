@@ -1,0 +1,32 @@
+{
+  "dataset_version": "v001",
+  "dataset_hash": "37fe20fb52fb11463924dedb9fb3d7264eaace4480a537c66542c81de2e76b9b",
+  "observation_count": 129,
+  "distinct_repositories": [
+    "repo:c:/users/ashwin/downloads/projects/codenova/task1 - codenova-notes-api",
+    "repo:c:/users/ashwin/downloads/projects/codenova/task2 - codenova-task-management-api",
+    "repo:c:/users/ashwin/downloads/projects/edumentor",
+    "repo:c:/users/ashwin/downloads/projects/mistiq",
+    "repo:c:/users/ashwin/downloads/projects/portfolio",
+    "repo:c:/users/ashwin/downloads/projects/pravaha",
+    "repo:c:/users/ashwin/downloads/projects/sakshadatathon",
+    "repo:c:/users/ashwin/downloads/projects/salesstorm",
+    "repo:c:/users/ashwin/downloads/projects/tetravateportfolio/portfolio"
+  ],
+  "non_synthetic_only": true,
+  "categories": [
+    "architecture",
+    "configuration",
+    "data_integrity",
+    "dependency",
+    "deployment",
+    "error_handling",
+    "requirements",
+    "security",
+    "testing"
+  ],
+  "timestamp_range": {
+    "first": "2025-12-12T03:31:39",
+    "last": "2026-10-27T10:30:19"
+  }
+}

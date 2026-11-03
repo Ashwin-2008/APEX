@@ -13,6 +13,7 @@ def test_database_initialization() -> None:
         "learner_states", "predictions", "recommendations",
         "reviewed_projects", "project_reviews", "project_findings", "project_predictions",
         "project_requirements", "requirement_coverage",
+        "users", "notifications", "activity_events",
     }
 
 

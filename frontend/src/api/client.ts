@@ -1,6 +1,28 @@
 const configuredBase = import.meta.env.VITE_API_URL?.trim() || '/api'
 export const API_BASE = configuredBase.replace(/\/$/, '')
 
+export const AUTH_TOKEN_KEY = 'apex.auth.token'
+
+export function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function setAuthToken(token: string | null): void {
+  try {
+    if (token) {
+      localStorage.setItem(AUTH_TOKEN_KEY, token)
+    } else {
+      localStorage.removeItem(AUTH_TOKEN_KEY)
+    }
+  } catch {
+    // Ignore storage restrictions
+  }
+}
+
 export class ApiError extends Error {
   status: number
   code?: string
@@ -13,15 +35,26 @@ export class ApiError extends Error {
 }
 
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string> | undefined),
+  }
+
+  const token = getAuthToken()
+  if (token && !headers['Authorization']) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
+
   let response: Response
   try {
     response = await fetch(`${API_BASE}${path}`, {
       ...init,
-      headers: { 'Content-Type': 'application/json', ...init?.headers },
+      headers,
     })
   } catch {
-    throw new ApiError('MISTIQ could not reach the learning service. Check that the backend is running.', 0)
+    throw new ApiError('APEX could not reach the backend service. Check that the server is running on http://127.0.0.1:8000.', 0)
   }
+
   if (!response.ok) {
     let message = 'The request could not be completed. Please try again.'
     let code: string | undefined
@@ -29,9 +62,13 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       const body = await response.json() as { detail?: string; error?: string; message?: string }
       message = body.detail || body.message || message
       code = body.error
-      if (response.status === 409) message = 'Keep practicing. MISTIQ needs more interaction history before it can identify reliable patterns.'
-      if (response.status === 503) message = 'The learning prediction service is not ready yet. Your practice can continue when it is available.'
-    } catch { /* Keep the student-facing fallback. */ }
+      if (response.status === 401) {
+        // Broadcast token expiry / unauthorized so UI can transition gracefully
+        window.dispatchEvent(new CustomEvent('apex:unauthorized'))
+      }
+    } catch {
+      // Keep fallback
+    }
     throw new ApiError(message, response.status, code)
   }
   return response.json() as Promise<T>

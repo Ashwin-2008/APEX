@@ -197,7 +197,7 @@ export function ProfileSettingsPage() {
             <div className="disconnected-project-box">
               <EmptyStateCard
                 title="No repository connected"
-                description="Connect a local project folder or public GitHub repository to enable real-time telemetry, finding resolution, and MISTIQ-APR forecasts."
+                description="Connect a local project folder or public GitHub repository to enable real-time telemetry, finding resolution, and Apex-APR forecasts."
                 actionLabel="Connect Repository"
                 actionLink="/project-review"
               />

@@ -5,6 +5,7 @@ import json
 from app.core.config import settings
 from .huggingface import HuggingFaceQwenProvider
 from .groq import GroqProvider
+from .remediation import generate_remediation_suggestion
 
 
 def _provider():

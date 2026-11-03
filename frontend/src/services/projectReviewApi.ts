@@ -1,4 +1,4 @@
-import type { EvolutionReport, FailureHistoryResponse, ProjectReview, RequirementReport, ResearchDatasetResponse, ResearchEvaluationResponse, ResearchPrediction, ResearchStatus, ReviewComparison, ReviewHistoryItem, TrajectoryResponse } from '../types/projectReview'
+import type { CodeIntelligencePreview, EvolutionReport, FailureHistoryResponse, ProjectReview, RegistrySummary, RemediationResponse, RequirementReport, ResearchDatasetResponse, ResearchEvaluationResponse, ResearchPrediction, ResearchStatus, ReviewComparison, ReviewHistoryItem, TrajectoryResponse } from '../types/projectReview'
 const baseUrl = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '')
 export async function analyzeProject(projectPath: string): Promise<ProjectReview> {
   const response = await fetch(`${baseUrl}/project-reviews/analyze`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_path: projectPath }) })
@@ -22,4 +22,23 @@ export async function getFailureHistory(projectId: number): Promise<FailureHisto
 export async function getTrajectory(projectId: number): Promise<TrajectoryResponse> { return getResearch<TrajectoryResponse>(`${projectId}/trajectory`, 'Unable to load observed failure transitions.') }
 export async function getProjects(): Promise<Array<{ id: number; name: string; repository_path: string; source_type: string; repository_url: string | null; branch: string | null; current_commit_sha: string | null; monitoring_status: string; updated_at: string | null }>> { const response = await fetch(`${baseUrl}/project-reviews/projects`); if (!response.ok) throw new Error('Unable to load projects list.'); return response.json() }
 export async function getLatestReview(projectId: number): Promise<ProjectReview> { const response = await fetch(`${baseUrl}/project-reviews/${projectId}/latest`); if (!response.ok) throw new Error('Unable to load latest review.'); return response.json() }
-
+export async function getCodeIntelligence(projectId: number): Promise<CodeIntelligencePreview & { risk_regions?: CodeIntelligencePreview['top_risk_regions'] }> { return getResearch(`${projectId}/code-intelligence`, 'Unable to load line-level code intelligence.') }
+export async function requestRemediation(projectId: number, item: { file?: string | null; start_line?: number | null; end_line?: number | null; category: string; title: string; explanation?: string; state?: string }): Promise<RemediationResponse> {
+  const response = await fetch(`${baseUrl}/project-reviews/${projectId}/remediation`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(item) })
+  const payload: unknown = await response.json().catch(() => null)
+  if (!response.ok) { const detail = typeof payload === 'object' && payload !== null && 'detail' in payload ? String(payload.detail) : 'Unable to generate remediation suggestion.'; throw new Error(detail) }
+  return payload as RemediationResponse
+}
+export async function getModelRegistry(): Promise<RegistrySummary> { return getResearch<RegistrySummary>('research/registry', 'Unable to load model registry.') }
+export async function promoteCandidateModel(candidateId: string): Promise<Record<string, unknown>> {
+  const response = await fetch(`${baseUrl}/project-reviews/research/candidates/${encodeURIComponent(candidateId)}/promote`, { method: 'POST' })
+  const payload: unknown = await response.json().catch(() => null)
+  if (!response.ok) { const detail = typeof payload === 'object' && payload !== null && 'detail' in payload ? String(payload.detail) : 'Unable to promote candidate model.'; throw new Error(detail) }
+  return payload as Record<string, unknown>
+}
+export async function rollbackProductionModel(targetCandidateId?: string): Promise<Record<string, unknown>> {
+  const response = await fetch(`${baseUrl}/project-reviews/research/production/rollback`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target_candidate_id: targetCandidateId ?? null }) })
+  const payload: unknown = await response.json().catch(() => null)
+  if (!response.ok) { const detail = typeof payload === 'object' && payload !== null && 'detail' in payload ? String(payload.detail) : 'Unable to roll back production model.'; throw new Error(detail) }
+  return payload as Record<string, unknown>
+}

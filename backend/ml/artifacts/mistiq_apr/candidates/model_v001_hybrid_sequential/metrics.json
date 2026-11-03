@@ -1,0 +1,2634 @@
+{
+  "candidate_id": "model_v001_hybrid_sequential",
+  "algorithm": "hybrid_sequential",
+  "trained_at": "2026-10-28T16:21:19+00:00",
+  "walk_forward_metrics": {
+    "sample_count": 123,
+    "accuracy": 0.4146341463414634,
+    "macro_precision": 0.2774825253548658,
+    "macro_recall": 0.27555675126296597,
+    "macro_f1": 0.2686640807792744,
+    "weighted_f1": 0.44348750503230117,
+    "top_2_accuracy": 0.5609756097560976,
+    "top_3_accuracy": 0.6910569105691057,
+    "log_loss": 2.995406249210397,
+    "confusion_matrix": [
+      [
+        3,
+        0,
+        2,
+        3,
+        2,
+        1,
+        0,
+        1,
+        2
+      ],
+      [
+        0,
+        1,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
+        1
+      ],
+      [
+        0,
+        0,
+        2,
+        0,
+        0,
+        4,
+        0,
+        3,
+        0
+      ],
+      [
+        1,
+        1,
+        1,
+        1,
+        0,
+        2,
+        0,
+        1,
+        3
+      ],
+      [
+        0,
+        0,
+        0,
+        1,
+        0,
+        0,
+        0,
+        3,
+        1
+      ],
+      [
+        1,
+        0,
+        4,
+        0,
+        0,
+        5,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        3,
+        0,
+        2
+      ],
+      [
+        2,
+        0,
+        1,
+        5,
+        4,
+        2,
+        2,
+        36,
+        7
+      ],
+      [
+        0,
+        2,
+        0,
+        1,
+        0,
+        0,
+        1,
+        3,
+        0
+      ]
+    ],
+    "per_category": {
+      "architecture": {
+        "precision": 0.42857142857142855,
+        "recall": 0.21428571428571427,
+        "f1": 0.2857142857142857,
+        "support": 14
+      },
+      "configuration": {
+        "precision": 0.25,
+        "recall": 0.3333333333333333,
+        "f1": 0.2857142857142857,
+        "support": 3
+      },
+      "data_integrity": {
+        "precision": 0.2,
+        "recall": 0.2222222222222222,
+        "f1": 0.21052631578947367,
+        "support": 9
+      },
+      "dependency": {
+        "precision": 0.09090909090909091,
+        "recall": 0.1,
+        "f1": 0.09523809523809523,
+        "support": 10
+      },
+      "deployment": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 5
+      },
+      "error_handling": {
+        "precision": 0.3333333333333333,
+        "recall": 0.5,
+        "f1": 0.4,
+        "support": 10
+      },
+      "requirements": {
+        "precision": 0.42857142857142855,
+        "recall": 0.5,
+        "f1": 0.46153846153846156,
+        "support": 6
+      },
+      "security": {
+        "precision": 0.7659574468085106,
+        "recall": 0.6101694915254238,
+        "f1": 0.6792452830188679,
+        "support": 59
+      },
+      "testing": {
+        "precision": 0.0,
+        "recall": 0.0,
+        "f1": 0.0,
+        "support": 7
+      }
+    },
+    "labels": [
+      "architecture",
+      "configuration",
+      "data_integrity",
+      "dependency",
+      "deployment",
+      "error_handling",
+      "requirements",
+      "security",
+      "testing"
+    ]
+  },
+  "walk_forward_comparison": [
+    {
+      "model": "Majority Class",
+      "status": "EVALUATED",
+      "metrics": {
+        "sample_count": 123,
+        "accuracy": 0.44715447154471544,
+        "macro_precision": 0.11267056530214425,
+        "macro_recall": 0.12808716707021792,
+        "macro_f1": 0.11043568517252728,
+        "weighted_f1": 0.35326157226028854,
+        "top_2_accuracy": 0.5040650406504065,
+        "top_3_accuracy": 0.6097560975609756,
+        "log_loss": 19.92657260536558,
+        "confusion_matrix": [
+          [
+            1,
+            1,
+            0,
+            0,
+            0,
+            2,
+            0,
+            10,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            4,
+            0,
+            4,
+            0
+          ],
+          [
+            2,
+            1,
+            0,
+            1,
+            0,
+            3,
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            4,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            1,
+            0,
+            8,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            6,
+            0
+          ],
+          [
+            2,
+            0,
+            0,
+            2,
+            0,
+            3,
+            0,
+            52,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            6,
+            0
+          ]
+        ],
+        "per_category": {
+          "architecture": {
+            "precision": 0.2,
+            "recall": 0.07142857142857142,
+            "f1": 0.10526315789473684,
+            "support": 14
+          },
+          "configuration": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 3
+          },
+          "data_integrity": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 9
+          },
+          "dependency": {
+            "precision": 0.2,
+            "recall": 0.1,
+            "f1": 0.13333333333333333,
+            "support": 10
+          },
+          "deployment": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 5
+          },
+          "error_handling": {
+            "precision": 0.06666666666666667,
+            "recall": 0.1,
+            "f1": 0.08,
+            "support": 10
+          },
+          "requirements": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 6
+          },
+          "security": {
+            "precision": 0.5473684210526316,
+            "recall": 0.8813559322033898,
+            "f1": 0.6753246753246753,
+            "support": 59
+          },
+          "testing": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 7
+          }
+        },
+        "labels": [
+          "architecture",
+          "configuration",
+          "data_integrity",
+          "dependency",
+          "deployment",
+          "error_handling",
+          "requirements",
+          "security",
+          "testing"
+        ]
+      },
+      "n_cutoffs": 123
+    },
+    {
+      "model": "Latest Failure",
+      "status": "EVALUATED",
+      "metrics": {
+        "sample_count": 123,
+        "accuracy": 0.2682926829268293,
+        "macro_precision": 0.13986928104575164,
+        "macro_recall": 0.1653663348578603,
+        "macro_f1": 0.10782892867291845,
+        "weighted_f1": 0.3118291643274489,
+        "top_2_accuracy": 0.5447154471544715,
+        "top_3_accuracy": 0.5853658536585366,
+        "log_loss": 26.098230700965544,
+        "confusion_matrix": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            4,
+            0,
+            10
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            3
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            9
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            3,
+            0,
+            7
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            10
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0,
+            4
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            26,
+            32
+          ],
+          [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            5
+          ]
+        ],
+        "per_category": {
+          "architecture": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 14
+          },
+          "configuration": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 3
+          },
+          "data_integrity": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 9
+          },
+          "dependency": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 10
+          },
+          "deployment": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 5
+          },
+          "error_handling": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 10
+          },
+          "requirements": {
+            "precision": 0.2,
+            "recall": 0.3333333333333333,
+            "f1": 0.25,
+            "support": 6
+          },
+          "security": {
+            "precision": 1.0,
+            "recall": 0.4406779661016949,
+            "f1": 0.611764705882353,
+            "support": 59
+          },
+          "testing": {
+            "precision": 0.058823529411764705,
+            "recall": 0.7142857142857143,
+            "f1": 0.10869565217391304,
+            "support": 7
+          }
+        },
+        "labels": [
+          "architecture",
+          "configuration",
+          "data_integrity",
+          "dependency",
+          "deployment",
+          "error_handling",
+          "requirements",
+          "security",
+          "testing"
+        ]
+      },
+      "n_cutoffs": 123
+    },
+    {
+      "model": "Static Logistic Regression",
+      "status": "EVALUATED",
+      "metrics": {
+        "sample_count": 123,
+        "accuracy": 0.3983739837398374,
+        "macro_precision": 0.19168266804524697,
+        "macro_recall": 0.17156906704929303,
+        "macro_f1": 0.1685895362919845,
+        "weighted_f1": 0.39411732501163393,
+        "top_2_accuracy": 0.5772357723577236,
+        "top_3_accuracy": 0.6747967479674797,
+        "log_loss": 3.3992836029277784,
+        "confusion_matrix": [
+          [
+            1,
+            1,
+            1,
+            3,
+            0,
+            3,
+            0,
+            4,
+            1
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            2,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0,
+            6,
+            0,
+            2,
+            0
+          ],
+          [
+            1,
+            2,
+            1,
+            0,
+            0,
+            2,
+            0,
+            1,
+            3
+          ],
+          [
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            2,
+            1
+          ],
+          [
+            0,
+            0,
+            1,
+            0,
+            0,
+            5,
+            0,
+            4,
+            0
+          ],
+          [
+            3,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            2,
+            4,
+            7,
+            1,
+            1,
+            0,
+            41,
+            2
+          ],
+          [
+            2,
+            0,
+            0,
+            3,
+            0,
+            0,
+            0,
+            2,
+            0
+          ]
+        ],
+        "per_category": {
+          "architecture": {
+            "precision": 0.125,
+            "recall": 0.07142857142857142,
+            "f1": 0.09090909090909091,
+            "support": 14
+          },
+          "configuration": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 3
+          },
+          "data_integrity": {
+            "precision": 0.1111111111111111,
+            "recall": 0.1111111111111111,
+            "f1": 0.1111111111111111,
+            "support": 9
+          },
+          "dependency": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 10
+          },
+          "deployment": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 5
+          },
+          "error_handling": {
+            "precision": 0.29411764705882354,
+            "recall": 0.5,
+            "f1": 0.37037037037037035,
+            "support": 10
+          },
+          "requirements": {
+            "precision": 0.5,
+            "recall": 0.16666666666666666,
+            "f1": 0.25,
+            "support": 6
+          },
+          "security": {
+            "precision": 0.6949152542372882,
+            "recall": 0.6949152542372882,
+            "f1": 0.6949152542372882,
+            "support": 59
+          },
+          "testing": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 7
+          }
+        },
+        "labels": [
+          "architecture",
+          "configuration",
+          "data_integrity",
+          "dependency",
+          "deployment",
+          "error_handling",
+          "requirements",
+          "security",
+          "testing"
+        ]
+      },
+      "n_cutoffs": 123
+    },
+    {
+      "model": "Random Forest",
+      "status": "EVALUATED",
+      "metrics": {
+        "sample_count": 123,
+        "accuracy": 0.4878048780487805,
+        "macro_precision": 0.3369302342420622,
+        "macro_recall": 0.2893313006307357,
+        "macro_f1": 0.3076738678652554,
+        "weighted_f1": 0.48794251300494734,
+        "top_2_accuracy": 0.6016260162601627,
+        "top_3_accuracy": 0.6910569105691057,
+        "log_loss": 3.1509363464960503,
+        "confusion_matrix": [
+          [
+            4,
+            0,
+            1,
+            1,
+            2,
+            1,
+            0,
+            3,
+            2
+          ],
+          [
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            2,
+            0,
+            0,
+            2,
+            0,
+            4,
+            0
+          ],
+          [
+            1,
+            1,
+            1,
+            1,
+            0,
+            2,
+            0,
+            1,
+            3
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            3,
+            1
+          ],
+          [
+            1,
+            0,
+            4,
+            0,
+            0,
+            4,
+            0,
+            1,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            3,
+            2,
+            1
+          ],
+          [
+            4,
+            0,
+            3,
+            3,
+            1,
+            1,
+            0,
+            45,
+            2
+          ],
+          [
+            0,
+            0,
+            0,
+            2,
+            1,
+            0,
+            1,
+            3,
+            0
+          ]
+        ],
+        "per_category": {
+          "architecture": {
+            "precision": 0.36363636363636365,
+            "recall": 0.2857142857142857,
+            "f1": 0.32,
+            "support": 14
+          },
+          "configuration": {
+            "precision": 0.5,
+            "recall": 0.3333333333333333,
+            "f1": 0.4,
+            "support": 3
+          },
+          "data_integrity": {
+            "precision": 0.18181818181818182,
+            "recall": 0.2222222222222222,
+            "f1": 0.2,
+            "support": 9
+          },
+          "dependency": {
+            "precision": 0.1111111111111111,
+            "recall": 0.1,
+            "f1": 0.10526315789473684,
+            "support": 10
+          },
+          "deployment": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 5
+          },
+          "error_handling": {
+            "precision": 0.4,
+            "recall": 0.4,
+            "f1": 0.4,
+            "support": 10
+          },
+          "requirements": {
+            "precision": 0.75,
+            "recall": 0.5,
+            "f1": 0.6,
+            "support": 6
+          },
+          "security": {
+            "precision": 0.7258064516129032,
+            "recall": 0.7627118644067796,
+            "f1": 0.743801652892562,
+            "support": 59
+          },
+          "testing": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 7
+          }
+        },
+        "labels": [
+          "architecture",
+          "configuration",
+          "data_integrity",
+          "dependency",
+          "deployment",
+          "error_handling",
+          "requirements",
+          "security",
+          "testing"
+        ]
+      },
+      "n_cutoffs": 123
+    },
+    {
+      "model": "MISTIQ-APR",
+      "status": "EVALUATED",
+      "metrics": {
+        "sample_count": 123,
+        "accuracy": 0.43089430894308944,
+        "macro_precision": 0.2634800384800385,
+        "macro_recall": 0.2534600783188354,
+        "macro_f1": 0.2559660936853919,
+        "weighted_f1": 0.4424756767503879,
+        "top_2_accuracy": 0.5691056910569106,
+        "top_3_accuracy": 0.6747967479674797,
+        "log_loss": 3.7584800251980517,
+        "confusion_matrix": [
+          [
+            3,
+            0,
+            2,
+            3,
+            2,
+            1,
+            0,
+            1,
+            2
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            2,
+            0,
+            0,
+            4,
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            1,
+            1,
+            1,
+            0,
+            2,
+            0,
+            1,
+            3
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            3,
+            1
+          ],
+          [
+            2,
+            0,
+            4,
+            0,
+            0,
+            4,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            2,
+            1
+          ],
+          [
+            3,
+            0,
+            1,
+            3,
+            3,
+            3,
+            1,
+            40,
+            5
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            5,
+            0
+          ]
+        ],
+        "per_category": {
+          "architecture": {
+            "precision": 0.3,
+            "recall": 0.21428571428571427,
+            "f1": 0.25,
+            "support": 14
+          },
+          "configuration": {
+            "precision": 0.3333333333333333,
+            "recall": 0.3333333333333333,
+            "f1": 0.3333333333333333,
+            "support": 3
+          },
+          "data_integrity": {
+            "precision": 0.2,
+            "recall": 0.2222222222222222,
+            "f1": 0.21052631578947367,
+            "support": 9
+          },
+          "dependency": {
+            "precision": 0.125,
+            "recall": 0.1,
+            "f1": 0.1111111111111111,
+            "support": 10
+          },
+          "deployment": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 5
+          },
+          "error_handling": {
+            "precision": 0.2857142857142857,
+            "recall": 0.4,
+            "f1": 0.3333333333333333,
+            "support": 10
+          },
+          "requirements": {
+            "precision": 0.4,
+            "recall": 0.3333333333333333,
+            "f1": 0.36363636363636365,
+            "support": 6
+          },
+          "security": {
+            "precision": 0.7272727272727273,
+            "recall": 0.6779661016949152,
+            "f1": 0.7017543859649122,
+            "support": 59
+          },
+          "testing": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 7
+          }
+        },
+        "labels": [
+          "architecture",
+          "configuration",
+          "data_integrity",
+          "dependency",
+          "deployment",
+          "error_handling",
+          "requirements",
+          "security",
+          "testing"
+        ]
+      },
+      "n_cutoffs": 123
+    },
+    {
+      "model": "MISTIQ-APR Sequential Hybrid",
+      "status": "EVALUATED",
+      "metrics": {
+        "sample_count": 123,
+        "accuracy": 0.4146341463414634,
+        "macro_precision": 0.2774825253548658,
+        "macro_recall": 0.27555675126296597,
+        "macro_f1": 0.2686640807792744,
+        "weighted_f1": 0.44348750503230117,
+        "top_2_accuracy": 0.5609756097560976,
+        "top_3_accuracy": 0.6910569105691057,
+        "log_loss": 2.995406249210397,
+        "confusion_matrix": [
+          [
+            3,
+            0,
+            2,
+            3,
+            2,
+            1,
+            0,
+            1,
+            2
+          ],
+          [
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            0,
+            0,
+            2,
+            0,
+            0,
+            4,
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            1,
+            1,
+            1,
+            0,
+            2,
+            0,
+            1,
+            3
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            3,
+            1
+          ],
+          [
+            1,
+            0,
+            4,
+            0,
+            0,
+            5,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            3,
+            0,
+            2
+          ],
+          [
+            2,
+            0,
+            1,
+            5,
+            4,
+            2,
+            2,
+            36,
+            7
+          ],
+          [
+            0,
+            2,
+            0,
+            1,
+            0,
+            0,
+            1,
+            3,
+            0
+          ]
+        ],
+        "per_category": {
+          "architecture": {
+            "precision": 0.42857142857142855,
+            "recall": 0.21428571428571427,
+            "f1": 0.2857142857142857,
+            "support": 14
+          },
+          "configuration": {
+            "precision": 0.25,
+            "recall": 0.3333333333333333,
+            "f1": 0.2857142857142857,
+            "support": 3
+          },
+          "data_integrity": {
+            "precision": 0.2,
+            "recall": 0.2222222222222222,
+            "f1": 0.21052631578947367,
+            "support": 9
+          },
+          "dependency": {
+            "precision": 0.09090909090909091,
+            "recall": 0.1,
+            "f1": 0.09523809523809523,
+            "support": 10
+          },
+          "deployment": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 5
+          },
+          "error_handling": {
+            "precision": 0.3333333333333333,
+            "recall": 0.5,
+            "f1": 0.4,
+            "support": 10
+          },
+          "requirements": {
+            "precision": 0.42857142857142855,
+            "recall": 0.5,
+            "f1": 0.46153846153846156,
+            "support": 6
+          },
+          "security": {
+            "precision": 0.7659574468085106,
+            "recall": 0.6101694915254238,
+            "f1": 0.6792452830188679,
+            "support": 59
+          },
+          "testing": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 7
+          }
+        },
+        "labels": [
+          "architecture",
+          "configuration",
+          "data_integrity",
+          "dependency",
+          "deployment",
+          "error_handling",
+          "requirements",
+          "security",
+          "testing"
+        ]
+      },
+      "n_cutoffs": 123
+    }
+  ],
+  "chronological_holdout": {
+    "status": "COMPLETED",
+    "metrics": {
+      "sample_count": 19,
+      "accuracy": 0.05263157894736842,
+      "macro_precision": 0.037037037037037035,
+      "macro_recall": 0.037037037037037035,
+      "macro_f1": 0.037037037037037035,
+      "weighted_f1": 0.05263157894736842,
+      "top_2_accuracy": 0.5263157894736842,
+      "top_3_accuracy": 0.6842105263157895,
+      "log_loss": 2.1764229507443518,
+      "confusion_matrix": [
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          1
+        ],
+        [
+          8,
+          0,
+          0,
+          2,
+          0,
+          0,
+          2,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "per_category": {
+        "architecture": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "configuration": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "data_integrity": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "dependency": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "deployment": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 2
+        },
+        "error_handling": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 0
+        },
+        "requirements": {
+          "precision": 0.3333333333333333,
+          "recall": 0.3333333333333333,
+          "f1": 0.3333333333333333,
+          "support": 3
+        },
+        "security": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 12
+        },
+        "testing": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 2
+        }
+      },
+      "labels": [
+        "architecture",
+        "configuration",
+        "data_integrity",
+        "dependency",
+        "deployment",
+        "error_handling",
+        "requirements",
+        "security",
+        "testing"
+      ]
+    },
+    "train_size": 110,
+    "test_size": 19
+  },
+  "unseen_repository_evaluation": {
+    "status": "COMPLETED",
+    "message": "9 unseen-repository holdout folds across 9 repository groups.",
+    "n_folds": 9,
+    "leakage_passed": true,
+    "candidate_metrics": {
+      "sample_count": 129,
+      "accuracy": 0.3333333333333333,
+      "macro_precision": 0.185163139329806,
+      "macro_recall": 0.20990545580709513,
+      "macro_f1": 0.17870014453011612,
+      "weighted_f1": 0.36643831565808355,
+      "top_2_accuracy": 0.4418604651162791,
+      "top_3_accuracy": 0.5116279069767442,
+      "log_loss": 4.525364337382763,
+      "confusion_matrix": [
+        [
+          4,
+          1,
+          0,
+          1,
+          1,
+          0,
+          3,
+          2,
+          3
+        ],
+        [
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          0,
+          0,
+          2
+        ],
+        [
+          8,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          2,
+          2,
+          0,
+          2,
+          0,
+          0,
+          2,
+          1,
+          1
+        ],
+        [
+          1,
+          1,
+          0,
+          0,
+          1,
+          0,
+          1,
+          1,
+          0
+        ],
+        [
+          9,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          5,
+          0,
+          1
+        ],
+        [
+          14,
+          3,
+          2,
+          2,
+          4,
+          1,
+          3,
+          31,
+          1
+        ],
+        [
+          1,
+          2,
+          1,
+          2,
+          1,
+          0,
+          1,
+          1,
+          0
+        ]
+      ],
+      "per_category": {
+        "architecture": {
+          "precision": 0.1,
+          "recall": 0.26666666666666666,
+          "f1": 0.14545454545454545,
+          "support": 15
+        },
+        "configuration": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 3
+        },
+        "data_integrity": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 9
+        },
+        "dependency": {
+          "precision": 0.25,
+          "recall": 0.2,
+          "f1": 0.2222222222222222,
+          "support": 10
+        },
+        "deployment": {
+          "precision": 0.14285714285714285,
+          "recall": 0.2,
+          "f1": 0.16666666666666666,
+          "support": 5
+        },
+        "error_handling": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 10
+        },
+        "requirements": {
+          "precision": 0.3125,
+          "recall": 0.7142857142857143,
+          "f1": 0.43478260869565216,
+          "support": 7
+        },
+        "security": {
+          "precision": 0.8611111111111112,
+          "recall": 0.5081967213114754,
+          "f1": 0.6391752577319587,
+          "support": 61
+        },
+        "testing": {
+          "precision": 0.0,
+          "recall": 0.0,
+          "f1": 0.0,
+          "support": 9
+        }
+      },
+      "labels": [
+        "architecture",
+        "configuration",
+        "data_integrity",
+        "dependency",
+        "deployment",
+        "error_handling",
+        "requirements",
+        "security",
+        "testing"
+      ]
+    },
+    "baseline_comparison": {
+      "Majority Class": {
+        "sample_count": 129,
+        "accuracy": 0.4728682170542636,
+        "macro_precision": 0.05254091300602928,
+        "macro_recall": 0.1111111111111111,
+        "macro_f1": 0.07134502923976609,
+        "weighted_f1": 0.3036311709506324,
+        "top_2_accuracy": 0.5426356589147286,
+        "top_3_accuracy": 0.5968992248062015,
+        "log_loss": 18.999755274883455,
+        "confusion_matrix": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            15,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            3,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            9,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            10,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            5,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            10,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            7,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            61,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            9,
+            0
+          ]
+        ],
+        "per_category": {
+          "architecture": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 15
+          },
+          "configuration": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 3
+          },
+          "data_integrity": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 9
+          },
+          "dependency": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 10
+          },
+          "deployment": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 5
+          },
+          "error_handling": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 10
+          },
+          "requirements": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 7
+          },
+          "security": {
+            "precision": 0.4728682170542636,
+            "recall": 1.0,
+            "f1": 0.6421052631578947,
+            "support": 61
+          },
+          "testing": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 9
+          }
+        },
+        "labels": [
+          "architecture",
+          "configuration",
+          "data_integrity",
+          "dependency",
+          "deployment",
+          "error_handling",
+          "requirements",
+          "security",
+          "testing"
+        ]
+      },
+      "Latest Failure": {
+        "sample_count": 129,
+        "accuracy": 0.26356589147286824,
+        "macro_precision": 0.13872053872053872,
+        "macro_recall": 0.15317894006418595,
+        "macro_f1": 0.10457061031773676,
+        "weighted_f1": 0.30314910667757505,
+        "top_2_accuracy": 0.5503875968992248,
+        "top_3_accuracy": 0.5968992248062015,
+        "log_loss": 26.28140033452983,
+        "confusion_matrix": [
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            4,
+            0,
+            11
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            3
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            9
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            3,
+            0,
+            7
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            10
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0,
+            5
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            26,
+            34
+          ],
+          [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0,
+            6
+          ]
+        ],
+        "per_category": {
+          "architecture": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 15
+          },
+          "configuration": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 3
+          },
+          "data_integrity": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 9
+          },
+          "dependency": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 10
+          },
+          "deployment": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 5
+          },
+          "error_handling": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 10
+          },
+          "requirements": {
+            "precision": 0.18181818181818182,
+            "recall": 0.2857142857142857,
+            "f1": 0.2222222222222222,
+            "support": 7
+          },
+          "security": {
+            "precision": 1.0,
+            "recall": 0.4262295081967213,
+            "f1": 0.5977011494252874,
+            "support": 61
+          },
+          "testing": {
+            "precision": 0.06666666666666667,
+            "recall": 0.6666666666666666,
+            "f1": 0.12121212121212122,
+            "support": 9
+          }
+        },
+        "labels": [
+          "architecture",
+          "configuration",
+          "data_integrity",
+          "dependency",
+          "deployment",
+          "error_handling",
+          "requirements",
+          "security",
+          "testing"
+        ]
+      },
+      "Static Logistic Regression": {
+        "sample_count": 129,
+        "accuracy": 0.3798449612403101,
+        "macro_precision": 0.12007042253521126,
+        "macro_recall": 0.1349379824789661,
+        "macro_f1": 0.12261623325453114,
+        "weighted_f1": 0.3454910310427381,
+        "top_2_accuracy": 0.4728682170542636,
+        "top_3_accuracy": 0.5581395348837209,
+        "log_loss": 4.959460917069927,
+        "confusion_matrix": [
+          [
+            4,
+            0,
+            0,
+            1,
+            2,
+            0,
+            2,
+            6,
+            0
+          ],
+          [
+            2,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            5,
+            0,
+            0,
+            0,
+            1,
+            1,
+            0,
+            2,
+            0
+          ],
+          [
+            5,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            4,
+            0
+          ],
+          [
+            8,
+            0,
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            6,
+            0
+          ],
+          [
+            6,
+            0,
+            4,
+            6,
+            0,
+            0,
+            1,
+            43,
+            1
+          ],
+          [
+            1,
+            0,
+            0,
+            2,
+            0,
+            0,
+            0,
+            6,
+            0
+          ]
+        ],
+        "per_category": {
+          "architecture": {
+            "precision": 0.125,
+            "recall": 0.26666666666666666,
+            "f1": 0.1702127659574468,
+            "support": 15
+          },
+          "configuration": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 3
+          },
+          "data_integrity": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 9
+          },
+          "dependency": {
+            "precision": 0.1,
+            "recall": 0.1,
+            "f1": 0.1,
+            "support": 10
+          },
+          "deployment": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 5
+          },
+          "error_handling": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 10
+          },
+          "requirements": {
+            "precision": 0.25,
+            "recall": 0.14285714285714285,
+            "f1": 0.18181818181818182,
+            "support": 7
+          },
+          "security": {
+            "precision": 0.6056338028169014,
+            "recall": 0.7049180327868853,
+            "f1": 0.6515151515151515,
+            "support": 61
+          },
+          "testing": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 9
+          }
+        },
+        "labels": [
+          "architecture",
+          "configuration",
+          "data_integrity",
+          "dependency",
+          "deployment",
+          "error_handling",
+          "requirements",
+          "security",
+          "testing"
+        ]
+      },
+      "Random Forest": {
+        "sample_count": 129,
+        "accuracy": 0.4496124031007752,
+        "macro_precision": 0.21360280546327057,
+        "macro_recall": 0.22464509786914158,
+        "macro_f1": 0.20879217783979687,
+        "weighted_f1": 0.38737480681002273,
+        "top_2_accuracy": 0.5658914728682171,
+        "top_3_accuracy": 0.6589147286821705,
+        "log_loss": 4.9810432887502785,
+        "confusion_matrix": [
+          [
+            1,
+            1,
+            1,
+            2,
+            0,
+            0,
+            0,
+            10,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            3,
+            0
+          ],
+          [
+            1,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            7,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            2,
+            0,
+            0,
+            0,
+            6,
+            1
+          ],
+          [
+            2,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            2,
+            0
+          ],
+          [
+            5,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            4,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            6,
+            0,
+            1
+          ],
+          [
+            11,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            48,
+            0
+          ],
+          [
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            2,
+            6,
+            0
+          ]
+        ],
+        "per_category": {
+          "architecture": {
+            "precision": 0.047619047619047616,
+            "recall": 0.06666666666666667,
+            "f1": 0.05555555555555555,
+            "support": 15
+          },
+          "configuration": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 3
+          },
+          "data_integrity": {
+            "precision": 0.25,
+            "recall": 0.1111111111111111,
+            "f1": 0.15384615384615385,
+            "support": 9
+          },
+          "dependency": {
+            "precision": 0.4,
+            "recall": 0.2,
+            "f1": 0.26666666666666666,
+            "support": 10
+          },
+          "deployment": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 5
+          },
+          "error_handling": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 10
+          },
+          "requirements": {
+            "precision": 0.6666666666666666,
+            "recall": 0.8571428571428571,
+            "f1": 0.75,
+            "support": 7
+          },
+          "security": {
+            "precision": 0.5581395348837209,
+            "recall": 0.7868852459016393,
+            "f1": 0.6530612244897959,
+            "support": 61
+          },
+          "testing": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 9
+          }
+        },
+        "labels": [
+          "architecture",
+          "configuration",
+          "data_integrity",
+          "dependency",
+          "deployment",
+          "error_handling",
+          "requirements",
+          "security",
+          "testing"
+        ]
+      },
+      "MISTIQ-APR": {
+        "sample_count": 129,
+        "accuracy": 0.24806201550387597,
+        "macro_precision": 0.22345775917204488,
+        "macro_recall": 0.1898690259345997,
+        "macro_f1": 0.19627255460588794,
+        "weighted_f1": 0.27341648446299605,
+        "top_2_accuracy": 0.4186046511627907,
+        "top_3_accuracy": 0.4883720930232558,
+        "log_loss": 9.030322503893714,
+        "confusion_matrix": [
+          [
+            4,
+            0,
+            0,
+            1,
+            1,
+            0,
+            0,
+            6,
+            3
+          ],
+          [
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            2
+          ],
+          [
+            8,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            2,
+            0,
+            0,
+            2,
+            0,
+            0,
+            0,
+            3,
+            3
+          ],
+          [
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            3,
+            0
+          ],
+          [
+            10,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            5,
+            0,
+            1
+          ],
+          [
+            22,
+            0,
+            0,
+            2,
+            1,
+            2,
+            1,
+            20,
+            13
+          ],
+          [
+            1,
+            1,
+            0,
+            1,
+            1,
+            0,
+            0,
+            5,
+            0
+          ]
+        ],
+        "per_category": {
+          "architecture": {
+            "precision": 0.08163265306122448,
+            "recall": 0.26666666666666666,
+            "f1": 0.125,
+            "support": 15
+          },
+          "configuration": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 3
+          },
+          "data_integrity": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 9
+          },
+          "dependency": {
+            "precision": 0.3333333333333333,
+            "recall": 0.2,
+            "f1": 0.25,
+            "support": 10
+          },
+          "deployment": {
+            "precision": 0.25,
+            "recall": 0.2,
+            "f1": 0.2222222222222222,
+            "support": 5
+          },
+          "error_handling": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 10
+          },
+          "requirements": {
+            "precision": 0.8333333333333334,
+            "recall": 0.7142857142857143,
+            "f1": 0.7692307692307693,
+            "support": 7
+          },
+          "security": {
+            "precision": 0.5128205128205128,
+            "recall": 0.32786885245901637,
+            "f1": 0.4,
+            "support": 61
+          },
+          "testing": {
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0,
+            "support": 9
+          }
+        },
+        "labels": [
+          "architecture",
+          "configuration",
+          "data_integrity",
+          "dependency",
+          "deployment",
+          "error_handling",
+          "requirements",
+          "security",
+          "testing"
+        ]
+      }
+    }
+  },
+  "subgroup_metrics": {
+    "by_language": {
+      "javascript": {
+        "sample_count": 30,
+        "accuracy": 0.23333333333333334,
+        "macro_f1": 0.12037037037037036,
+        "weighted_f1": 0.26666666666666666,
+        "top_2_accuracy": 0.36666666666666664
+      },
+      "python": {
+        "sample_count": 75,
+        "accuracy": 0.5066666666666667,
+        "macro_f1": 0.2615314510051352,
+        "weighted_f1": 0.5269214995530785,
+        "top_2_accuracy": 0.64
+      },
+      "typescript": {
+        "sample_count": 15,
+        "accuracy": 0.4,
+        "macro_f1": 0.06349206349206349,
+        "weighted_f1": 0.45714285714285713,
+        "top_2_accuracy": 0.6666666666666666
+      },
+      "unknown": {
+        "sample_count": 3,
+        "accuracy": 0.0,
+        "macro_f1": 0.0,
+        "weighted_f1": 0.0,
+        "top_2_accuracy": 0.0
+      }
+    },
+    "by_size_bucket": {
+      "large": {
+        "sample_count": 30,
+        "accuracy": 0.5333333333333333,
+        "macro_f1": 0.1994301994301994,
+        "weighted_f1": 0.5512820512820513,
+        "top_2_accuracy": 0.7333333333333333
+      },
+      "medium": {
+        "sample_count": 48,
+        "accuracy": 0.5,
+        "macro_f1": 0.24554433221099886,
+        "weighted_f1": 0.5418434343434344,
+        "top_2_accuracy": 0.625
+      },
+      "small": {
+        "sample_count": 41,
+        "accuracy": 0.2682926829268293,
+        "macro_f1": 0.13915343915343914,
+        "weighted_f1": 0.2875725900116144,
+        "top_2_accuracy": 0.4146341463414634
+      },
+      "tiny": {
+        "sample_count": 4,
+        "accuracy": 0.0,
+        "macro_f1": 0.0,
+        "weighted_f1": 0.0,
+        "top_2_accuracy": 0.0
+      }
+    },
+    "by_label_confidence": {
+      "high_gte_0_8": {
+        "sample_count": 87,
+        "accuracy": 0.27586206896551724,
+        "macro_f1": 0.2450442345179187,
+        "weighted_f1": 0.30303411047512685,
+        "top_2_accuracy": 0.4482758620689655
+      },
+      "medium_lt_0_8": {
+        "sample_count": 36,
+        "accuracy": 0.75,
+        "macro_f1": 0.09836065573770492,
+        "weighted_f1": 0.7377049180327869,
+        "top_2_accuracy": 0.8333333333333334
+      }
+    }
+  }
+}

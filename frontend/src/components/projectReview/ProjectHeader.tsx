@@ -60,7 +60,7 @@ export function ProjectHeader({
     <header className="pr-header card">
       <div className="pr-header-main">
         <div className="pr-header-badge-row">
-          <span className="eyebrow">MISTIQ-APR</span>
+          <span className="eyebrow">Apex-APR</span>
           <span className="platform-tag">ENGINEERING OBSERVABILITY</span>
         </div>
 

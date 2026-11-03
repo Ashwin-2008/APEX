@@ -2,6 +2,7 @@ from __future__ import annotations
 import json
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
+from backend.ml.mistiq_apr.ingestion import redact_secrets
 
 class GroqProvider:
     endpoint = "https://api.groq.com/openai/v1/chat/completions"
@@ -49,6 +50,7 @@ class GroqProvider:
     def explain_finding(self, evidence: dict) -> dict:
         if not self.token or not self.model:
             return {"available": False, "message": "LLM explanation unavailable: Groq token or model is not configured."}
+        redacted_evidence_json, redactions = redact_secrets(json.dumps(evidence, ensure_ascii=False))
         prompt = (
             "Return ONLY a JSON object with these exact keys and types: "
             'summary (string), why_it_matters (string), recommended_action (string), '
@@ -56,7 +58,7 @@ class GroqProvider:
             'affected_components (array of strings), confidence (number between 0 and 1). '
             "Use only the supplied evidence; never invent files, vulnerabilities, requirements, tests or evidence. "
             "If the evidence does not support an explanation, put \"Insufficient evidence\" in summary and use an empty array for tests_to_add.\n"
-            + json.dumps(evidence, ensure_ascii=False)
+            + redacted_evidence_json
         )
         body = json.dumps({
             "model": self.model,

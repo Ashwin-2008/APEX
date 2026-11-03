@@ -1,0 +1,51 @@
+{
+  "active_candidate_id": "model_v003_random_forest",
+  "active_model_relpath": "candidates/model_v003_random_forest/model.pkl",
+  "active_model_sha256": "60fa2618cb180572207efc6986e538bb078f95c3ebb168eeff90cfd91b57d51c",
+  "active_version": "2.0-model_v003_random_forest",
+  "original_v1_backup": {
+    "archive_relpath": "archive/model_v1.0_original/model.pkl",
+    "candidate_id": "model_v1.0_original",
+    "model_relpath": "model.pkl",
+    "sha256": "fc28f408390b2b53d62f40e276a8b9b60896cc54a34fbd2369604c6dd89d6be5",
+    "version": "1.0"
+  },
+  "previous_production": {
+    "candidate_id": "model_v1.0_original",
+    "model_relpath": "model.pkl",
+    "sha256": "fc28f408390b2b53d62f40e276a8b9b60896cc54a34fbd2369604c6dd89d6be5",
+    "version": "1.0"
+  },
+  "promotion_history": [
+    {
+      "action": "initial_registration",
+      "candidate_id": "model_v1.0_original",
+      "model_relpath": "model.pkl",
+      "sha256": "fc28f408390b2b53d62f40e276a8b9b60896cc54a34fbd2369604c6dd89d6be5",
+      "timestamp": "2026-10-28T16:19:27.097904+00:00",
+      "version": "1.0"
+    },
+    {
+      "action": "promote",
+      "candidate_id": "model_v003_random_forest",
+      "comparison_summary": {
+        "unseen_repository_deltas": {
+          "accuracy_delta": 0.2016,
+          "macro_f1_delta": 0.0125,
+          "top_2_accuracy_delta": 0.1473
+        },
+        "walk_forward_deltas": {
+          "accuracy_delta": 0.0569,
+          "macro_f1_delta": 0.0517,
+          "top_2_accuracy_delta": 0.0325
+        }
+      },
+      "model_relpath": "candidates/model_v003_random_forest/model.pkl",
+      "previous_candidate_id": "model_v1.0_original",
+      "sha256": "60fa2618cb180572207efc6986e538bb078f95c3ebb168eeff90cfd91b57d51c",
+      "timestamp": "2026-10-28T16:28:07.044849+00:00",
+      "version": "2.0-model_v003_random_forest"
+    }
+  ],
+  "updated_at": "2026-10-28T16:28:07.044849+00:00"
+}

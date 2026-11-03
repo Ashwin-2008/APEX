@@ -1,0 +1,218 @@
+{
+  "audit_version": "v001",
+  "generated_at": "2026-10-28T21:26:00+05:30",
+  "production_artifacts_inventory": [
+    {
+      "path": "backend/ml/artifacts/mistiq_apr/model.pkl",
+      "role": "Active MISTIQ-APR production model bundle (MISTIQAPRModelArtifact pickle)",
+      "size_bytes": 13593,
+      "sha256": "fc28f408390b2b53d62f40e276a8b9b60896cc54a34fbd2369604c6dd89d6be5",
+      "created_at_utc": "2026-10-07T17:39:28.146599+00:00",
+      "modified_at_utc": "2026-10-09T04:33:37.710537+00:00",
+      "model_name": "MISTIQ-APR",
+      "model_version": "1.0",
+      "algorithm": "Pipeline(StandardScaler(), LogisticRegression(max_iter=1000, random_state=42))",
+      "feature_count": 112,
+      "categories": ["dependency", "integration", "requirements", "security", "testing"],
+      "training_observations_at_save": 665,
+      "dataset_version": "1.0.0",
+      "dataset_hash_at_save": "86741048544cce5bc683baa63497aecfa3ee29afa38939bb5a1291b3248b7436",
+      "trained_at": "2026-10-09T04:33:37+00:00"
+    },
+    {
+      "path": "backend/ml/artifacts/mistiq_apr/model_metadata.json",
+      "role": "Sidecar metadata for backend/ml/artifacts/mistiq_apr/model.pkl",
+      "size_bytes": 9750,
+      "sha256": "e174ed0d5c9e8f84b5e4df12dc5c2c75948b16c03417c6912201b78c438170bc",
+      "created_at_utc": "2026-10-07T17:39:28.152321+00:00",
+      "modified_at_utc": "2026-10-09T04:33:37.712545+00:00"
+    },
+    {
+      "path": "backend/ml/artifacts/mistiq_apr/MISTIQ_APR_RESEARCH_REPORT.md",
+      "role": "Saved walk-forward research report corresponding to model.pkl v1.0",
+      "size_bytes": 37319,
+      "sha256": "cadf6c08873855f24222014186257ad21b96cfd6e7fae16626bd072375f250a2",
+      "created_at_utc": "2026-10-06T13:24:27.875581+00:00",
+      "modified_at_utc": "2026-10-09T04:33:37.717946+00:00"
+    },
+    {
+      "path": "backend/ml/artifacts/mistiq_apr/MISTIQ_APR_ABLATION_REPORT.md",
+      "role": "Saved feature-group ablation study corresponding to model.pkl v1.0",
+      "size_bytes": 1764,
+      "sha256": "a63939759df214961659724a4a06a2287e32836805ce1b39b506e3e653e297a6",
+      "created_at_utc": "2026-10-06T14:47:11.312167+00:00",
+      "modified_at_utc": "2026-10-09T04:33:36.296576+00:00"
+    },
+    {
+      "path": "backend/ml/artifacts/ampa.npz",
+      "role": "Learner mistake-intelligence model artifact (AMPA)",
+      "size_bytes": 2172,
+      "sha256": "df8bae8c3e3309fde5d0616d9c6db35766cfbff581ab04e3d29d92721e75aafc",
+      "created_at_utc": "2026-10-06T11:52:58.454297+00:00",
+      "modified_at_utc": "2026-10-06T11:52:58.454297+00:00"
+    }
+  ],
+  "dataset_audit": {
+    "database_path": "mistiq.db",
+    "total_reviewed_projects_rows": 205,
+    "unique_real_repositories": 3,
+    "real_project_rows": 5,
+    "synthetic_e2e_temp_project_rows": 200,
+    "total_reviews": 444,
+    "real_project_reviews": 37,
+    "synthetic_e2e_temp_reviews": 407,
+    "total_chronological_transitions": 239,
+    "real_project_transitions": 32,
+    "synthetic_e2e_temp_transitions": 207,
+    "total_exploded_observations": 741,
+    "real_project_observations": 40,
+    "synthetic_e2e_temp_observations": 701,
+    "distinct_failure_categories_in_taxonomy": 16,
+    "distinct_failure_categories_observed": 5,
+    "observed_categories": ["dependency", "integration", "requirements", "security", "testing"],
+    "missing_label_percentage": 0.0,
+    "unique_feature_vectors_out_of_741": 39,
+    "unique_feature_target_pairs_out_of_741": 62,
+    "exact_duplicate_feature_target_observations": 679,
+    "exact_duplicate_percentage": 91.63,
+    "targets_exploded_per_transition_distribution": {
+      "1": 24,
+      "2": 9,
+      "3": 125,
+      "4": 81
+    },
+    "category_distribution_all_741": {
+      "testing": 213,
+      "dependency": 207,
+      "requirements": 205,
+      "security": 114,
+      "integration": 2
+    },
+    "category_distribution_real_40": {
+      "security": 32,
+      "testing": 6,
+      "integration": 2
+    },
+    "category_distribution_synthetic_temp_701": {
+      "dependency": 207,
+      "testing": 207,
+      "requirements": 205,
+      "security": 82
+    },
+    "repositories_with_min_reviews": {
+      "gte_2_reviews_all": 130,
+      "gte_2_reviews_real": 4,
+      "gte_3_reviews_all": 79,
+      "gte_3_reviews_real": 4,
+      "gte_5_reviews_all": 6,
+      "gte_5_reviews_real": 3,
+      "gte_10_reviews_all": 1,
+      "gte_10_reviews_real": 1
+    },
+    "data_composition": "MIXED (94.6% synthetic E2E temporary test directories from automated test runs persisted to production SQLite DB; 5.4% real local repositories)"
+  },
+  "baseline_evaluation_original_665": {
+    "sample_count": 656,
+    "n_cutoffs": 207,
+    "models": {
+      "Majority Class": {
+        "accuracy": 0.2866,
+        "macro_precision": 0.1437,
+        "macro_recall": 0.2029,
+        "macro_f1": 0.1528,
+        "weighted_f1": 0.2100,
+        "top_2_accuracy": 0.5470,
+        "top_3_accuracy": 0.7195,
+        "log_loss": 25.7767
+      },
+      "Latest Failure": {
+        "accuracy": 0.3155,
+        "macro_precision": 0.2599,
+        "macro_recall": 0.2388,
+        "macro_f1": 0.1472,
+        "weighted_f1": 0.1823,
+        "top_2_accuracy": 0.4394,
+        "top_3_accuracy": 0.7165,
+        "log_loss": 24.5206
+      },
+      "Static Logistic Regression": {
+        "accuracy": 0.3125,
+        "macro_precision": 0.3137,
+        "macro_recall": 0.2431,
+        "macro_f1": 0.2319,
+        "weighted_f1": 0.2987,
+        "top_2_accuracy": 0.6061,
+        "top_3_accuracy": 0.8872,
+        "log_loss": 1.2605
+      },
+      "Random Forest": {
+        "accuracy": 0.3095,
+        "macro_precision": 0.2540,
+        "macro_recall": 0.3077,
+        "macro_f1": 0.2230,
+        "weighted_f1": 0.2595,
+        "top_2_accuracy": 0.6000,
+        "top_3_accuracy": 0.8826,
+        "log_loss": 1.3026
+      },
+      "MISTIQ-APR": {
+        "accuracy": 0.3155487804878049,
+        "macro_precision": 0.2610561502277862,
+        "macro_recall": 0.25502751584056976,
+        "macro_f1": 0.2512450778454363,
+        "weighted_f1": 0.3112,
+        "top_2_accuracy": 0.6067073170731707,
+        "top_3_accuracy": 0.8887195121951219,
+        "log_loss": 1.216272883181858,
+        "brier_score": 0.6884,
+        "expected_calibration_error": 0.0042
+      }
+    }
+  },
+  "baseline_evaluation_current_741": {
+    "sample_count": 732,
+    "models": {
+      "Majority Class": {
+        "accuracy": 0.2842,
+        "macro_f1": 0.1531,
+        "weighted_f1": 0.2121,
+        "top_2_accuracy": 0.5369,
+        "top_3_accuracy": 0.7213,
+        "log_loss": 25.8017
+      },
+      "Latest Failure": {
+        "accuracy": 0.3210,
+        "macro_f1": 0.1612,
+        "weighted_f1": 0.1853,
+        "top_2_accuracy": 0.4399,
+        "top_3_accuracy": 0.7186,
+        "log_loss": 24.4723
+      },
+      "Static Logistic Regression": {
+        "accuracy": 0.3183,
+        "macro_f1": 0.2421,
+        "weighted_f1": 0.2980,
+        "top_2_accuracy": 0.6066,
+        "top_3_accuracy": 0.8880,
+        "log_loss": 1.2580
+      },
+      "Random Forest": {
+        "accuracy": 0.3156,
+        "macro_f1": 0.2245,
+        "weighted_f1": 0.2578,
+        "top_2_accuracy": 0.6011,
+        "top_3_accuracy": 0.8839,
+        "log_loss": 1.2915
+      },
+      "MISTIQ-APR": {
+        "accuracy": 0.3210,
+        "macro_f1": 0.2581,
+        "weighted_f1": 0.3123,
+        "top_2_accuracy": 0.6093,
+        "top_3_accuracy": 0.8893,
+        "log_loss": 1.2052
+      }
+    }
+  }
+}
+

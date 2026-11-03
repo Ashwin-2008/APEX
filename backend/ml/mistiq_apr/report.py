@@ -12,6 +12,9 @@ from pathlib import Path
 from typing import Any
 
 REPORT_FILENAME = "MISTIQ_APR_RESEARCH_REPORT.md"
+_PROTECTED_REPORT_PATH = (
+    Path(__file__).resolve().parents[1] / "artifacts" / "mistiq_apr" / REPORT_FILENAME
+).resolve()
 
 
 def _f(value: Any) -> str:
@@ -36,6 +39,11 @@ def _format_range(date_range: dict[str, str] | None) -> str:
 def write_report(path: str | Path, dataset: dict[str, Any], evaluation: dict[str, Any]) -> Path:
     """Write the full research report; adapts honestly to the available data."""
     destination = Path(path)
+    try:
+        if destination.resolve() == _PROTECTED_REPORT_PATH and _PROTECTED_REPORT_PATH.exists():
+            destination = _PROTECTED_REPORT_PATH.parent / "reports" / REPORT_FILENAME
+    except OSError:
+        pass
     destination.parent.mkdir(parents=True, exist_ok=True)
     status = str(evaluation.get("status") or "UNKNOWN")
     refused = bool(evaluation.get("refused"))
@@ -327,4 +335,3 @@ def _limitations_section(dataset: dict[str, Any], evaluation: dict[str, Any]) ->
 
 
 write_mistiq_apr_report = write_report
-

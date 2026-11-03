@@ -9,10 +9,19 @@ from app.services.project_review_service import analyze_project
 from app.services.project_review_persistence import compare_reviews, failure_history, persist_analysis, project_history, serialize_review
 from app.services.project_evolution_service import evolution, trajectory, requirements, research_observations
 from app.services.mistiq_apr_research_service import (
+    project_code_intelligence,
+    project_remediation,
+    research_candidate_comparison,
     research_dataset,
     research_evaluation,
+    research_ingestion_status,
     research_prediction,
+    research_promote_candidate,
+    research_registry,
+    research_rollback_production,
+    research_run_ingestion,
     research_status,
+    research_train_candidate,
 )
 from app.services.project_monitor import event_bus, start_watcher, stop_watcher
 from app.services.git_service import get_current_sha, get_branch, is_git_repository
@@ -20,6 +29,72 @@ from app.models.entities import ProjectReview, ReviewedProject
 from sqlalchemy import select
 
 router = APIRouter(prefix="/project-reviews")
+
+
+def _check_project_access(session, project_id: int, request: Request) -> ReviewedProject:
+    """Validate project existence and tenant ownership if an auth token is provided."""
+    project = session.get(ReviewedProject, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    token = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    elif "token" in request.query_params:
+        token = request.query_params.get("token")
+
+    if token:
+        from app.services.auth_service import decode_access_token
+        payload = decode_access_token(token)
+        if not payload:
+            raise HTTPException(status_code=401, detail="Invalid or expired session token")
+        if project.owner_id is not None and project.owner_id != payload["sub"]:
+            raise HTTPException(status_code=404, detail="Project not found")
+    return project
+
+
+def _check_project_sse_access(session, project_id: int, request: Request) -> ReviewedProject:
+    """Validate SSE connection via single-use ticket, standard header, or legacy dev token."""
+    project = session.get(ReviewedProject, project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    ticket = request.query_params.get("ticket")
+    if ticket:
+        from app.services.ticket_service import sse_ticket_store
+        ticket_data = sse_ticket_store.validate_and_consume(ticket, expected_project_id=project_id)
+        if not ticket_data:
+            raise HTTPException(status_code=401, detail="Invalid, expired, or replayed SSE ticket.")
+        if project.owner_id is not None and project.owner_id != ticket_data["user_id"]:
+            raise HTTPException(status_code=404, detail="Project not found")
+        return project
+
+    token = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header[7:].strip()
+    elif "token" in request.query_params:
+        from app.core.config import settings
+        if settings.environment == "production":
+            raise HTTPException(
+                status_code=400,
+                detail="Bearer tokens in URL parameters are forbidden in production. Use POST /api/auth/sse-ticket instead.",
+            )
+        token = request.query_params.get("token")
+
+    if token:
+        from app.services.auth_service import decode_access_token
+        payload = decode_access_token(token)
+        if not payload:
+            raise HTTPException(status_code=401, detail="Invalid or expired session token")
+        if project.owner_id is not None and project.owner_id != payload["sub"]:
+            raise HTTPException(status_code=404, detail="Project not found")
+        return project
+
+    if project.owner_id is not None:
+        raise HTTPException(status_code=401, detail="Authentication required to access project stream.")
+    return project
 
 
 class ReviewRequest(BaseModel):
@@ -209,8 +284,11 @@ def stop_monitoring(project_id: int, request: Request):
     return {"project_id": project_id, "monitoring_status": "paused"}
 
 @router.get("/{project_id}/events")
-async def project_events(project_id: int):
+async def project_events(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        _check_project_sse_access(session, project_id, request)
     async def stream():
+        yield ": sse connected\n\n"
         async for event in event_bus.subscribe(project_id):
             import json
             yield f"event: {event.get('type', 'project.event')}\ndata: {json.dumps(event)}\n\n"
@@ -221,6 +299,7 @@ async def project_events(project_id: int):
 def history(project_id: int, request: Request):
     try:
         with request.app.state.SessionLocal() as session:
+            _check_project_access(session, project_id, request)
             return project_history(session, project_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -230,6 +309,7 @@ def history(project_id: int, request: Request):
 def failure_history_report(project_id: int, request: Request):
     try:
         with request.app.state.SessionLocal() as session:
+            _check_project_access(session, project_id, request)
             return failure_history(session, project_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -239,6 +319,7 @@ def failure_history_report(project_id: int, request: Request):
 def compare(project_id: int, request: Request):
     try:
         with request.app.state.SessionLocal() as session:
+            _check_project_access(session, project_id, request)
             return compare_reviews(session, project_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -247,24 +328,28 @@ def compare(project_id: int, request: Request):
 @router.get("/{project_id}/evolution")
 def evolution_report(project_id: int, request: Request):
     with request.app.state.SessionLocal() as session:
+        _check_project_access(session, project_id, request)
         return evolution(session, project_id)
 
 
 @router.get("/{project_id}/trajectory")
 def trajectory_report(project_id: int, request: Request):
     with request.app.state.SessionLocal() as session:
+        _check_project_access(session, project_id, request)
         return trajectory(session, project_id)
 
 
 @router.get("/{project_id}/requirements")
 def requirement_report(project_id: int, request: Request):
     with request.app.state.SessionLocal() as session:
+        _check_project_access(session, project_id, request)
         return requirements(session, project_id)
 
 
 @router.get("/{project_id}/requirements/coverage")
 def requirement_coverage(project_id: int, request: Request):
     with request.app.state.SessionLocal() as session:
+        _check_project_access(session, project_id, request)
         return requirements(session, project_id)
 
 
@@ -304,7 +389,21 @@ def research_evaluation_report(request: Request):
 @router.get("/projects", summary="List all reviewed projects")
 def list_projects(request: Request):
     with request.app.state.SessionLocal() as session:
-        projects = session.scalars(select(ReviewedProject).order_by(ReviewedProject.updated_at.desc())).all()
+        token = None
+        auth_header = request.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header[7:].strip()
+        elif "token" in request.query_params:
+            token = request.query_params.get("token")
+
+        query = select(ReviewedProject)
+        if token:
+            from app.services.auth_service import decode_access_token
+            payload = decode_access_token(token)
+            if payload and "sub" in payload:
+                query = query.where(ReviewedProject.owner_id == payload["sub"])
+        query = query.order_by(ReviewedProject.updated_at.desc())
+        projects = session.scalars(query).all()
         return [
             {
                 "id": p.id,
@@ -324,6 +423,7 @@ def list_projects(request: Request):
 @router.get("/{project_id}/latest", summary="Get latest completed review for a project")
 def get_latest_review(project_id: int, request: Request):
     with request.app.state.SessionLocal() as session:
+        _check_project_access(session, project_id, request)
         latest = session.scalar(
             select(ProjectReview)
             .where(ProjectReview.project_id == project_id)
@@ -332,4 +432,125 @@ def get_latest_review(project_id: int, request: Request):
         if not latest:
             raise HTTPException(404, "No reviews found for this project")
         return serialize_review(session, latest.id)
+
+
+class RemediationRequest(BaseModel):
+    file: str | None = None
+    start_line: int | None = None
+    end_line: int | None = None
+    category: str = "error_handling"
+    title: str = "Localized engineering review item"
+    explanation: str = ""
+    state: str = "verified_finding"
+
+
+class CandidateTrainRequest(BaseModel):
+    algorithm: str = "random_forest"
+    dataset_version: str = "v001"
+    candidate_id: str | None = None
+
+
+class RollbackRequest(BaseModel):
+    target_candidate_id: str | None = None
+
+
+class IngestionRunRequest(BaseModel):
+    target_repository_count: int = 100
+    dataset_version: str = "v001"
+
+
+@router.get("/{project_id}/code-intelligence", summary="Line-by-line AST indexing and evidence-based risk localization")
+def code_intelligence_report(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        _check_project_access(session, project_id, request)
+        try:
+            return project_code_intelligence(session, project_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{project_id}/architecture-graph", summary="Repository-wide architecture dependency graph, cycles, and metrics")
+def architecture_graph_report(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = project.repository_path
+        if not repo_path or not Path(repo_path).is_dir():
+            raise HTTPException(status_code=404, detail="Project repository directory does not exist on worker host.")
+        from app.services.analyzers.architecture_analyzer import run_architecture_analysis
+        arch_out = run_architecture_analysis(repo_path)
+        return {
+            "project_id": project_id,
+            "architecture_graph": arch_out.metrics.get("architecture_graph", {}),
+            "metrics": arch_out.metrics,
+            "cycle_findings": [f.to_dict() for f in arch_out.findings if f.rule_id == "ARCH-CIRCULAR-DEPENDENCY"],
+        }
+
+
+@router.post("/{project_id}/remediation", summary="Evidence-grounded AI remediation suggestion with secret redaction and patch validation")
+def remediation_report(project_id: int, body: RemediationRequest, request: Request):
+    with request.app.state.SessionLocal() as session:
+        _check_project_access(session, project_id, request)
+        try:
+            return project_remediation(session, project_id, body.model_dump())
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/research/registry", summary="List production, candidate, and archived models in the registry")
+def registry_list_report():
+    return research_registry()
+
+
+@router.get("/research/candidates/{candidate_id}/comparison", summary="Compare candidate model against production using 10-point promotion gate")
+def candidate_comparison_report(candidate_id: str):
+    try:
+        return research_candidate_comparison(candidate_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/research/candidates/train", summary="Train a new candidate model without modifying production")
+def train_candidate_report(body: CandidateTrainRequest, request: Request):
+    with request.app.state.SessionLocal() as session:
+        try:
+            return research_train_candidate(
+                session,
+                algorithm=body.algorithm,
+                dataset_version=body.dataset_version,
+                candidate_id=body.candidate_id,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.post("/research/candidates/{candidate_id}/promote", summary="Promote an eligible candidate model to production")
+def promote_candidate_report(candidate_id: str):
+    try:
+        return research_promote_candidate(candidate_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.post("/research/production/rollback", summary="Roll back production model to v1.0 or specified candidate")
+def rollback_production_report(body: RollbackRequest):
+    try:
+        return research_rollback_production(body.target_candidate_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/research/ingestion/status", summary="Get repository ingestion pipeline status and dataset manifest summary")
+def ingestion_status_report():
+    return research_ingestion_status()
+
+
+@router.post("/research/ingestion/run", summary="Execute the 16-stage repository collection and ingestion pipeline")
+def ingestion_run_report(body: IngestionRunRequest, request: Request):
+    with request.app.state.SessionLocal() as session:
+        return research_run_ingestion(
+            session,
+            target_repository_count=body.target_repository_count,
+            dataset_version=body.dataset_version,
+        )
+
 

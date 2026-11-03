@@ -1,6 +1,19 @@
 import { useEffect, useState } from 'react'
-import { getResearchDataset, getResearchEvaluation, getResearchPrediction, getResearchStatus } from '../services/projectReviewApi'
-import type { AblationRow, ResearchEvaluationResponse, ResearchPrediction, ResearchStatus } from '../types/projectReview'
+import {
+  getResearchDataset,
+  getResearchEvaluation,
+  getResearchPrediction,
+  getResearchStatus,
+  promoteCandidateModel,
+  rollbackProductionModel,
+} from '../services/projectReviewApi'
+import type {
+  AblationRow,
+  RegistrySummary,
+  ResearchEvaluationResponse,
+  ResearchPrediction,
+  ResearchStatus,
+} from '../types/projectReview'
 import '../styles/projectReview.css'
 import '../styles/researchLab.css'
 
@@ -13,7 +26,7 @@ const BASELINE_LABELS: Record<string, string> = {
   'Latest Failure': 'Latest Failure',
   'Static Logistic Regression': 'Static Logistic',
   'Random Forest': 'Random Forest',
-  'MISTIQ-APR': 'MISTIQ-APR',
+  'MISTIQ-APR': 'Apex-APR',
 }
 
 export const PREDICTION_DISCLAIMER = 'Prediction is based on historical project observations and is not a certainty.'
@@ -27,6 +40,7 @@ export function ResearchLabPage() {
   const [prediction, setPrediction] = useState<ResearchPrediction | null>(null)
   const [predictionBusy, setPredictionBusy] = useState(false)
   const [predictionError, setPredictionError] = useState('')
+  const [registryMessage, setRegistryMessage] = useState('')
 
   useEffect(() => {
     Promise.all([getResearchStatus(), getResearchDataset(), getResearchEvaluation()])
@@ -35,7 +49,7 @@ export function ResearchLabPage() {
         setProjects(dataset.project_list)
         setEvaluation(nextEvaluation)
       })
-      .catch(err => setError(err instanceof Error ? err.message : 'Unable to load the MISTIQ-APR Research Lab.'))
+      .catch(err => setError(err instanceof Error ? err.message : 'Unable to load the Apex-APR Research Lab.'))
   }, [])
 
   async function predict() {
@@ -52,14 +66,46 @@ export function ResearchLabPage() {
     }
   }
 
+  async function handlePromote(candidateId: string) {
+    setRegistryMessage('')
+    try {
+      const res = await promoteCandidateModel(candidateId)
+      if (res.promoted) {
+        setRegistryMessage(`Promoted ${candidateId} to active production.`)
+        const updatedStatus = await getResearchStatus()
+        setStatus(updatedStatus)
+      } else {
+        setRegistryMessage(`Promotion refused: ${String(res.reason || 'Criteria not met')}`)
+      }
+    } catch (err) {
+      setRegistryMessage(err instanceof Error ? err.message : 'Promotion failed.')
+    }
+  }
+
+  async function handleRollback(targetCandidateId?: string) {
+    setRegistryMessage('')
+    try {
+      const res = await rollbackProductionModel(targetCandidateId)
+      if (res.rolled_back) {
+        setRegistryMessage(`Rolled back production to ${String(res.active_candidate_id || 'v1.0')}.`)
+        const updatedStatus = await getResearchStatus()
+        setStatus(updatedStatus)
+      }
+    } catch (err) {
+      setRegistryMessage(err instanceof Error ? err.message : 'Rollback failed.')
+    }
+  }
+
   if (error) return <div className="lab-page"><div className="error" role="alert">{error}</div></div>
-  if (!status || !evaluation) return <div className="lab-page"><p className="muted">Loading the MISTIQ-APR Research Lab…</p></div>
+  if (!status || !evaluation) return <div className="lab-page"><p className="muted">Loading the Apex-APR Research Lab…</p></div>
+
+  const registry = status.registry || evaluation.registry
 
   return <div className="lab-page">
     <header className="lab-header">
-      <span className="eyebrow">MISTIQ-APR · Research infrastructure</span>
-      <h1>MISTIQ-APR Research Lab</h1>
-      <p>Walk-forward temporal evaluation, automated leakage validation, ablation, calibration, and artifact-backed prediction — reported only when real chronological review history supports them.</p>
+      <span className="eyebrow">Apex-APR · Research infrastructure</span>
+      <h1>Apex-APR Research Lab</h1>
+      <p>Walk-forward temporal evaluation, automated leakage validation, ablation, calibration, immutable model registry, and artifact-backed prediction — reported only when real chronological review history supports them.</p>
     </header>
 
     <div className="lab-grid">
@@ -68,6 +114,15 @@ export function ResearchLabPage() {
       <LeakagePanel status={status} />
       <BaselinePanel evaluation={evaluation} />
     </div>
+
+    {registry && (
+      <ModelRegistryPanel
+        registry={registry}
+        message={registryMessage}
+        onPromote={handlePromote}
+        onRollback={handleRollback}
+      />
+    )}
 
     <WalkForwardPanel evaluation={evaluation} />
     <div className="lab-grid">
@@ -89,6 +144,8 @@ export function ResearchLabPage() {
 
 function DatasetPanel({ status }: { status: ResearchStatus }) {
   const range = status.date_range
+  const audit = status.quality_audit
+  const ingestion = status.ingestion
   return <section className="card lab-panel" aria-label="Dataset status">
     <span className="card-kicker">Dataset status</span>
     <h2>Chronological review history</h2>
@@ -100,6 +157,17 @@ function DatasetPanel({ status }: { status: ResearchStatus }) {
       <div><span>Failure categories</span><strong>{status.failure_categories}</strong></div>
       <div><span>Date range</span><strong className="lab-small">{range ? `${range.first} → ${range.last}` : '—'}</strong></div>
     </div>
+    {audit && (
+      <div className="lab-meta" style={{ marginTop: '0.5rem' }}>
+        <p>Real repository groups: {audit.unique_real_repository_groups} ({audit.real_projects} real DB rows, {audit.synthetic_temp_projects} synthetic test rows)</p>
+        <p>Unique feature vectors: {audit.unique_feature_vectors} · Duplicate rate in raw DB: {audit.duplicate_observation_percentage}%</p>
+      </div>
+    )}
+    {ingestion && ingestion.curated_observations_count ? (
+      <div className="lab-meta" style={{ marginTop: '0.5rem' }}>
+        <p>Curated Git dataset ({ingestion.dataset_version}): {ingestion.curated_observations_count} non-duplicate observations across {ingestion.distinct_repository_groups_in_dataset} real repositories ({ingestion.secret_redactions_applied ?? 0} secret redactions)</p>
+      </div>
+    ) : null}
     <p className={`lab-badge ${status.status.startsWith('READY') ? 'ok' : 'warn'}`}>{status.status}</p>
     <p className="muted">{status.message}</p>
   </section>
@@ -110,17 +178,100 @@ function ModelPanel({ status }: { status: ResearchStatus }) {
   const metadata = status.artifact
   return <section className="card lab-panel" aria-label="Model status">
     <span className="card-kicker">Model status</span>
-    <h2>MISTIQ-APR artifact</h2>
+    <h2>Apex-APR artifact</h2>
     <p className={`lab-badge ${tone}`} data-testid="model-status">{status.model_status}</p>
     {status.model_detail && <p className="muted">{status.model_detail}</p>}
     {metadata && <div className="lab-meta">
       <p>Version: {String(metadata.version ?? '—')}</p>
+      <p>Algorithm: {String(metadata.algorithm ?? 'logistic_regression')}</p>
       <p>Trained at: {String(metadata.trained_at ?? '—')}</p>
       <p>Training observations: {String(metadata.training_observations ?? '—')}</p>
       <p>Dataset hash: {String(metadata.dataset_hash ?? '—')}</p>
       <p>Protocol: {String(metadata.evaluation_protocol ?? '—')}</p>
     </div>}
   </section>
+}
+
+function ModelRegistryPanel({
+  registry,
+  message,
+  onPromote,
+  onRollback,
+}: {
+  registry: RegistrySummary
+  message: string
+  onPromote: (candidateId: string) => void
+  onRollback: (targetCandidateId?: string) => void
+}) {
+  return (
+    <section className="card lab-panel" aria-label="Model registry">
+      <span className="card-kicker">Immutable model registry</span>
+      <h2>Production, Candidate & Archived Models</h2>
+      <div className="lab-meta">
+        <p>
+          <strong>Active Production:</strong> {registry.production.active_candidate_id} (v
+          {registry.production.active_version}) · SHA-256:{' '}
+          <code>{registry.production.active_model_sha256?.slice(0, 16) || '—'}…</code>
+        </p>
+      </div>
+      {message && <p className="lab-badge ok">{message}</p>}
+      {registry.candidates.length > 0 && (
+        <table className="lab-table">
+          <thead>
+            <tr>
+              <th>Candidate ID</th>
+              <th>Algorithm</th>
+              <th>Stage</th>
+              <th>Obs</th>
+              <th>WF Acc</th>
+              <th>WF Macro F1</th>
+              <th>Unseen-Repo Acc</th>
+              <th>Unseen-Repo Top-2</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {registry.candidates.map(cand => (
+              <tr key={cand.candidate_id}>
+                <td>{cand.candidate_id}</td>
+                <td>{pretty(cand.algorithm)}</td>
+                <td>{cand.stage.toUpperCase()}</td>
+                <td>{cand.training_observations ?? '—'}</td>
+                <td>{num(cand.primary_metrics?.accuracy)}</td>
+                <td>{num(cand.primary_metrics?.macro_f1)}</td>
+                <td>{num(cand.unseen_repository_metrics?.accuracy)}</td>
+                <td>{num(cand.unseen_repository_metrics?.top_2_accuracy)}</td>
+                <td>
+                  {cand.stage !== 'production' ? (
+                    <button
+                      type="button"
+                      className="button secondary"
+                      onClick={() => onPromote(cand.candidate_id)}
+                    >
+                      Promote
+                    </button>
+                  ) : (
+                    <span>Active</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {registry.production.active_candidate_id !== 'model_v1.0_original' && (
+        <div style={{ marginTop: '0.75rem' }}>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => onRollback('model_v1.0_original')}
+          >
+            Rollback to Original v1.0 Model
+          </button>
+        </div>
+      )}
+    </section>
+  )
 }
 
 function LeakagePanel({ status }: { status: ResearchStatus }) {
@@ -244,13 +395,13 @@ function CalibrationPanel({ evaluation }: { evaluation: ResearchEvaluationRespon
 }
 
 function PredictionPanel({ projects, projectId, setProjectId, prediction, busy, error, predict }: { projects: Array<{ id: number; name: string }>; projectId: string; setProjectId: (value: string) => void; prediction: ResearchPrediction | null; busy: boolean; error: string; predict: () => void }) {
-  return <section className="card lab-panel prediction-panel" aria-label="MISTIQ-APR prediction">
+  return <section className="card lab-panel prediction-panel" aria-label="Apex-APR prediction">
     <span className="card-kicker">Artifact-backed prediction</span><h2>Predict the next failure category</h2>
     <p className="muted">Predictions are available only when a validated model artifact exists. They are historical risk estimates, not certainties.</p>
     <div className="prediction-controls"><select aria-label="Project" value={projectId} onChange={event => setProjectId(event.target.value)}><option value="">Select a persisted project</option>{projects.map(project => <option key={project.id} value={project.id}>{project.name}</option>)}</select><button className="button" disabled={!projectId || busy} onClick={predict}>{busy ? 'Loading prediction…' : 'Predict'}</button></div>
     {error && <div className="error" role="alert">{error}</div>}
     {!prediction && !busy && <p className="lab-empty">Select a project to inspect the saved model prediction.</p>}
     {prediction && !prediction.available && <div className="lab-unavailable"><strong>Prediction unavailable</strong><p>{prediction.message || prediction.reason || 'Insufficient historical data.'}</p></div>}
-    {prediction?.available && <div className="prediction-result"><div className="prediction-primary"><span>Most likely next category</span><strong>{pretty(prediction.predicted_category || 'Unavailable')}</strong></div><div className="prediction-list">{(prediction.predictions || []).slice(0, 3).map(item => <div className="prediction-item" key={item.category}><strong>{pretty(item.category)}</strong><b>{(item.probability * 100).toFixed(1)}%</b><div className="prediction-bar"><i style={{ width: `${item.probability * 100}%` }} /></div></div>)}</div>{prediction.supporting_features && <details><summary>Supporting features</summary><ul>{prediction.supporting_features.slice(0, 8).map(feature => <li key={feature.feature}>{pretty(feature.feature)}: {feature.value.toFixed(4)} ({feature.direction})</li>)}</ul></details>}<div className="lab-meta">{prediction.model && <p>Model: {String(prediction.model.name || prediction.model.model || 'MISTIQ-APR')}</p>}{prediction.training_metadata && <p>Training observations: {String(prediction.training_metadata.training_observations || '—')}</p>}</div><p className="prediction-disclaimer">{prediction.disclaimer || PREDICTION_DISCLAIMER}</p></div>}
+    {prediction?.available && <div className="prediction-result"><div className="prediction-primary"><span>Most likely next category</span><strong>{pretty(prediction.predicted_category || 'Unavailable')}</strong></div><div className="prediction-list">{(prediction.predictions || []).slice(0, 3).map(item => <div className="prediction-item" key={item.category}><strong>{pretty(item.category)}</strong><b>{(item.probability * 100).toFixed(1)}%</b><div className="prediction-bar"><i style={{ width: `${item.probability * 100}%` }} /></div></div>)}</div>{prediction.supporting_features && <details><summary>Supporting features</summary><ul>{prediction.supporting_features.slice(0, 8).map(feature => <li key={feature.feature}>{pretty(feature.feature)}: {feature.value.toFixed(4)} ({feature.direction})</li>)}</ul></details>}<div className="lab-meta">{prediction.model && <p>Model: {String(prediction.model.name || prediction.model.model || 'Apex-APR')}</p>}{prediction.training_metadata && <p>Training observations: {String(prediction.training_metadata.training_observations || '—')}</p>}</div><p className="prediction-disclaimer">{prediction.disclaimer || PREDICTION_DISCLAIMER}</p></div>}
   </section>
 }

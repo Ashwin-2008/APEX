@@ -7,6 +7,22 @@ from app.db.base import Base
 from app.core.error_types import ErrorType
 
 
+class User(Base):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    username: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    full_name: Mapped[str | None] = mapped_column(String(200))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    preferences: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    projects: Mapped[list["ReviewedProject"]] = relationship(back_populates="owner", cascade="all, delete-orphan")
+    notifications: Mapped[list["Notification"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
 class Student(Base):
     __tablename__ = "students"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -133,16 +149,24 @@ class ReviewedProject(Base):
     __tablename__ = "reviewed_projects"
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    repository_path: Mapped[str] = mapped_column(String(1000), unique=True, nullable=False)
+    repository_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     source_type: Mapped[str] = mapped_column(String(20), nullable=False, default="local")
     repository_url: Mapped[str | None] = mapped_column(String(1000))
     branch: Mapped[str | None] = mapped_column(String(200))
     current_commit_sha: Mapped[str | None] = mapped_column(String(80))
     monitoring_status: Mapped[str] = mapped_column(String(30), nullable=False, default="paused")
     last_analyzed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    is_archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    analysis_coverage: Mapped[dict | None] = mapped_column(JSON)
+    settings: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+    owner: Mapped[User | None] = relationship(back_populates="projects")
     reviews: Mapped[list["ProjectReview"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    notifications: Mapped[list["Notification"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    activity_events: Mapped[list["ActivityEvent"]] = relationship(back_populates="project", cascade="all, delete-orphan")
 
 
 class ProjectReview(Base):
@@ -164,6 +188,7 @@ class ProjectFinding(Base):
     __tablename__ = "project_findings"
     id: Mapped[int] = mapped_column(primary_key=True)
     review_id: Mapped[int] = mapped_column(ForeignKey("project_reviews.id"), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(300))
     category: Mapped[str] = mapped_column(String(80), nullable=False)
     severity: Mapped[str] = mapped_column(String(20), nullable=False)
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
@@ -180,6 +205,11 @@ class ProjectFinding(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
     resolution_evidence: Mapped[str | None] = mapped_column(Text)
     related_commit: Mapped[str | None] = mapped_column(String(80))
+    suppressed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    suppression_reason: Mapped[str | None] = mapped_column(Text)
+    suppression_type: Mapped[str | None] = mapped_column(String(50))
+    suppressed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    suppressed_by: Mapped[int | None] = mapped_column(Integer)
     review: Mapped[ProjectReview] = relationship(back_populates="findings")
 
 
@@ -222,3 +252,30 @@ class RequirementCoverage(Base):
     confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0)
     evidence: Mapped[str] = mapped_column(Text, nullable=False)
     requirement: Mapped[ProjectRequirement] = relationship(back_populates="coverage")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True)
+    type: Mapped[str] = mapped_column(String(80), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    data: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    seen: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    user: Mapped[User] = relationship(back_populates="notifications")
+    project: Mapped[ReviewedProject | None] = relationship(back_populates="notifications")
+
+
+class ActivityEvent(Base):
+    __tablename__ = "activity_events"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    event_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    project: Mapped[ReviewedProject] = relationship(back_populates="activity_events")

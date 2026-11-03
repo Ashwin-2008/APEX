@@ -1,16 +1,19 @@
-"""Chronological (never shuffled) walk-forward split generation.
+"""Chronological (never shuffled) walk-forward and repository-grouped split generation.
 
 Walk-forward protocol:
 
-    Cutoff 1: Train → earliest observations        Test → next timepoint group
-    Cutoff 2: Train → observations up to cutoff 2  Test → next timepoint group
-    Cutoff k: Train → all observations strictly before the cutoff timepoint
-              Test  → every observation at the next timepoint
+    Cutoff 1: Train -> earliest observations        Test -> next timepoint group
+    Cutoff 2: Train -> observations up to cutoff 2  Test -> next timepoint group
+    Cutoff k: Train -> all observations strictly before the cutoff timepoint
+              Test  -> every observation at the next timepoint
 
-Observations are ordered by (timestamp, project_id, review_number, target) and
-split at timepoint-group boundaries only. Training always contains strictly
-earlier observations than the test group it is evaluated on. Random shuffling
-never occurs.
+Repository-grouped generalization protocol:
+
+    Observations are grouped by canonical repository identity (repository_group)
+    and ordered chronologically by each repository group's earliest observation.
+    For each held-out repository group, training uses only observations from
+    strictly other repository groups whose timestamps do not postdate the held-out
+    observation, testing generalization to unseen repositories.
 """
 from __future__ import annotations
 
@@ -25,6 +28,8 @@ from .constants import (
 from .dataset import Observation
 
 WALK_FORWARD_COMPLETED = "COMPLETED"
+REPO_GROUPED_COMPLETED = "COMPLETED"
+STATUS_INSUFFICIENT_REPO_GROUPED = "INSUFFICIENT DATA FOR REPOSITORY-GROUPED EVALUATION"
 
 
 def time_key(row: Observation) -> tuple[str, int, int, str]:
@@ -121,6 +126,97 @@ def generate_walk_forward_splits(
         f"{len(splits)} walk-forward cutoffs over {len(ordered)} chronological "
         "observations; training windows expand forward and are never shuffled."
     )
+
+
+def generate_repository_grouped_splits(
+    observations: list[Observation],
+    min_train: int = WALK_FORWARD_MIN_TRAIN_OBSERVATIONS,
+) -> tuple[list[WalkForwardSplit], str, str]:
+    """Build repository-grouped splits to evaluate generalization to unseen repositories.
+
+    Each fold holds out one canonical repository group (or project_id if group
+    is unset) and trains exclusively on observations from other repository groups.
+    """
+    ordered = sorted(observations, key=time_key)
+    if len(ordered) < MIN_OBSERVATIONS_FOR_EVALUATION:
+        return [], STATUS_INSUFFICIENT_REPO_GROUPED, (
+            f"Only {len(ordered)} observations are available; at least "
+            f"{MIN_OBSERVATIONS_FOR_EVALUATION} are required for repository-grouped evaluation."
+        )
+
+    def _group_id(row: Observation) -> str:
+        return row.repository_group or f"project:{row.project_id}"
+
+    groups: dict[str, list[Observation]] = {}
+    for row in ordered:
+        groups.setdefault(_group_id(row), []).append(row)
+
+    if len(groups) < 2:
+        return [], STATUS_INSUFFICIENT_REPO_GROUPED, (
+            f"Only {len(groups)} distinct repository group(s) available; at least 2 are required."
+        )
+
+    ordered_group_keys = sorted(groups.keys(), key=lambda g: (groups[g][0].timestamp, g))
+    splits: list[WalkForwardSplit] = []
+    for held_out_group in ordered_group_keys:
+        test_rows = tuple(groups[held_out_group])
+        train_rows = tuple(r for r in ordered if _group_id(r) != held_out_group)
+        if len(train_rows) < min_train or not test_rows:
+            continue
+        if len({r.target for r in train_rows}) < 2:
+            continue
+        splits.append(
+            WalkForwardSplit(
+                index=len(splits) + 1,
+                train=train_rows,
+                test=test_rows,
+                train_start=train_rows[0].timestamp,
+                train_end=train_rows[-1].timestamp,
+                test_start=test_rows[0].timestamp,
+                test_end=test_rows[-1].timestamp,
+            )
+        )
+
+    if not splits:
+        return [], STATUS_INSUFFICIENT_REPO_GROUPED, (
+            "No repository group has a complementary training set with at least "
+            f"{min_train} observations and two outcome classes."
+        )
+    return splits, REPO_GROUPED_COMPLETED, (
+        f"{len(splits)} unseen-repository holdout folds across {len(groups)} repository groups."
+    )
+
+
+def generate_chronological_holdout_split(
+    observations: list[Observation],
+    train_fraction: float = 0.70,
+    val_fraction: float = 0.15,
+) -> dict[str, tuple[Observation, ...]]:
+    """Split observations chronologically at timepoint boundaries into train, val, and untouched test."""
+    ordered = sorted(observations, key=time_key)
+    if not ordered:
+        return {"train": (), "validation": (), "test": ()}
+    boundaries = _group_boundaries(ordered)
+    if len(boundaries) < 3:
+        n = len(ordered)
+        t_end = max(1, int(n * train_fraction))
+        v_end = max(t_end, int(n * (train_fraction + val_fraction)))
+        return {
+            "train": tuple(ordered[:t_end]),
+            "validation": tuple(ordered[t_end:v_end]),
+            "test": tuple(ordered[v_end:]),
+        }
+
+    n_groups = len(boundaries)
+    train_g = max(1, int(round(n_groups * train_fraction)))
+    val_g = max(train_g + 1, min(n_groups - 1, int(round(n_groups * (train_fraction + val_fraction)))))
+    train_idx = boundaries[min(train_g, len(boundaries) - 1)]
+    val_idx = boundaries[min(val_g, len(boundaries) - 1)]
+    return {
+        "train": tuple(ordered[:train_idx]),
+        "validation": tuple(ordered[train_idx:val_idx]),
+        "test": tuple(ordered[val_idx:]),
+    }
 
 
 def _next_boundary(boundaries: list[int], current: int, total: int) -> int:

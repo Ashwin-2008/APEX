@@ -128,8 +128,8 @@ export function LoginPage() {
   return (
     <main className="entry-page">
       <div className="entry-brand">
-        <span className="brand-logo-gem">M</span>
-        MISTIQ<span>2.0</span>
+        <span className="brand-logo-gem">A</span>
+        ApexIQ<span>2.0</span>
       </div>
       <div className="entry-grid">
         <section className="entry-intro">
@@ -146,15 +146,15 @@ export function LoginPage() {
             <Button onClick={startShowcase} disabled={busy}>
               {busy ? 'Opening showcase…' : 'Start Showcase'} <span aria-hidden="true">→</span>
             </Button>
-            <a className="text-link" href="#explore-mistiq">
-              Explore MISTIQ
+            <a className="text-link" href="#explore-apexiq">
+              Explore ApexIQ
             </a>
           </div>
           <span className="showcase-label">Showcase Mode · Synthetic Data</span>
         </section>
 
-        <Card className="entry-card" id="explore-mistiq">
-          <div className="eyebrow">Explore MISTIQ</div>
+        <Card className="entry-card" id="explore-apexiq">
+          <div className="eyebrow">Explore ApexIQ</div>
           <h2>Continue with a local profile</h2>
           <p>
             This local demonstration uses synthetic data only. It does not provide account authentication.

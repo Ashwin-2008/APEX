@@ -1,0 +1,90 @@
+{
+  "available": true,
+  "sample_count": 123,
+  "classes": [
+    "architecture",
+    "configuration",
+    "data_integrity",
+    "dependency",
+    "deployment",
+    "error_handling",
+    "requirements",
+    "security",
+    "testing"
+  ],
+  "brier_score": 0.858998,
+  "expected_calibration_error": 0.319977,
+  "reliability_bins": [
+    {
+      "lower": 0.0,
+      "upper": 0.1,
+      "count": 0,
+      "mean_predicted_confidence": null,
+      "empirical_accuracy": null
+    },
+    {
+      "lower": 0.1,
+      "upper": 0.2,
+      "count": 0,
+      "mean_predicted_confidence": null,
+      "empirical_accuracy": null
+    },
+    {
+      "lower": 0.2,
+      "upper": 0.3,
+      "count": 1,
+      "mean_predicted_confidence": 0.2946,
+      "empirical_accuracy": 0.0
+    },
+    {
+      "lower": 0.3,
+      "upper": 0.4,
+      "count": 4,
+      "mean_predicted_confidence": 0.3799,
+      "empirical_accuracy": 0.0
+    },
+    {
+      "lower": 0.4,
+      "upper": 0.5,
+      "count": 11,
+      "mean_predicted_confidence": 0.4538,
+      "empirical_accuracy": 0.1818
+    },
+    {
+      "lower": 0.5,
+      "upper": 0.6,
+      "count": 17,
+      "mean_predicted_confidence": 0.5455,
+      "empirical_accuracy": 0.2353
+    },
+    {
+      "lower": 0.6,
+      "upper": 0.7,
+      "count": 20,
+      "mean_predicted_confidence": 0.6529,
+      "empirical_accuracy": 0.45
+    },
+    {
+      "lower": 0.7,
+      "upper": 0.8,
+      "count": 12,
+      "mean_predicted_confidence": 0.7485,
+      "empirical_accuracy": 0.4167
+    },
+    {
+      "lower": 0.8,
+      "upper": 0.9,
+      "count": 19,
+      "mean_predicted_confidence": 0.8626,
+      "empirical_accuracy": 0.4211
+    },
+    {
+      "lower": 0.9,
+      "upper": 1.0,
+      "count": 39,
+      "mean_predicted_confidence": 0.9705,
+      "empirical_accuracy": 0.641
+    }
+  ],
+  "methodology": "Calibrated on pooled walk-forward test predictions for the MISTIQ-APR model. Brier score is the mean multiclass squared error (0..2, lower is better); ECE is the top-label expected calibration error over 10 confidence bins (lower is better)."
+}

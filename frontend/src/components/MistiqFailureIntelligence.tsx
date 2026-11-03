@@ -1,36 +1,33 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
+  getCodeIntelligence,
   getFailureHistory,
   getResearchPrediction,
   getResearchStatus,
   getTrajectory,
+  requestRemediation,
 } from '../services/projectReviewApi'
 import type {
+  CodeIntelligencePreview,
+  CodeIntelligenceRiskRegion,
   FailureHistoryResponse,
   FailureHistoryRow,
+  RemediationResponse,
   ResearchPrediction,
   ResearchStatus,
   TrajectoryResponse,
 } from '../types/projectReview'
 import type { EventConnectionState } from '../hooks/useProjectEvents'
 import { dimensionLabel } from '../utils/labels'
-import {
-  ShieldIcon,
-  ActivityIcon,
-  ZapIcon,
-  CheckCircleIcon,
-  AlertTriangleIcon,
-  GitCommitIcon,
-} from './ui/Icons'
 
 type PredictionState = 'A' | 'B' | 'C' | 'D' | 'E'
 
 const PREDICTION_INTRO =
-  'MISTIQ learns from how engineering problems appear and change across project reviews to identify recurring patterns and estimate what type of problem may appear next.'
+  'ApexIQ learns from how engineering problems appear and change across project reviews to identify recurring patterns and estimate what type of problem may appear next.'
 const PREDICTION_CONTEXT =
   'Prediction is based on historical project observations and current project state. It is not a certainty or causal estimate.'
 const NO_HISTORY_YET =
-  'MISTIQ needs more project history before it can estimate the next failure category.'
+  'ApexIQ needs more project history before it can estimate the next failure category.'
 
 interface MistiqFailureIntelligenceProps {
   projectId: number
@@ -59,6 +56,13 @@ const STATE_FLOW_LABEL: Record<PredictionState, string> = {
   C: 'Available',
   D: 'Unavailable',
   E: 'Error',
+}
+
+const EVIDENCE_STATE_LABEL: Record<string, string> = {
+  verified_finding: 'Verified finding',
+  potential_risk: 'Potential risk',
+  model_ranked_candidate: 'Model-ranked review candidate',
+  unknown_insufficient_evidence: 'Unknown / insufficient evidence',
 }
 
 const DNA_CATEGORY: Record<string, string> = {
@@ -116,9 +120,11 @@ function whyItMatters(finding: FailureHistoryRow, reviewCount: number): string {
 function TimelineItem({
   finding,
   reviewCount,
+  onRemediate,
 }: {
   finding: FailureHistoryRow
   reviewCount: number
+  onRemediate?: (finding: FailureHistoryRow) => void
 }) {
   return (
     <details className="fi-timeline-item card">
@@ -169,6 +175,17 @@ function TimelineItem({
             </>
           )}
         </dl>
+        {finding.status !== 'RESOLVED' && onRemediate && (
+          <div style={{ marginTop: '0.75rem' }}>
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => onRemediate(finding)}
+            >
+              Generate AI Remediation
+            </button>
+          </div>
+        )}
       </div>
     </details>
   )
@@ -246,10 +263,11 @@ function PredictionOutput({ prediction }: { prediction: ResearchPrediction }) {
   const latestFindings = evidence?.findings_in_latest_review
   const trainingObservations =
     training?.training_observations ?? model?.training_observations
-  const modelName = `${String(model?.name || model?.model || 'MISTIQ-APR')}${
+  const modelName = `${String(model?.name || model?.model || 'Apex-APR')}${
     model?.version ? ` v${String(model.version)}` : ''
   }`
   const topFeatures = features.slice(0, 3)
+  const uncertainty = prediction.uncertainty
 
   return (
     <div className="fi-prediction-output">
@@ -272,10 +290,40 @@ function PredictionOutput({ prediction }: { prediction: ResearchPrediction }) {
                   }}
                 />
               </div>
+              {(item.historical_frequency !== undefined ||
+                item.deterministic_risk_score !== undefined) && (
+                <div className="fi-pred-submetrics" style={{ fontSize: '0.8rem', opacity: 0.85, marginTop: '0.25rem' }}>
+                  <span>Model score: {(item.model_score ?? item.probability).toFixed(3)}</span>
+                  {item.calibrated_probability !== undefined && item.calibrated_probability !== null && (
+                    <span> · Calibrated: {percent(item.calibrated_probability)}</span>
+                  )}
+                  {item.historical_frequency !== undefined && (
+                    <span> · Historical freq: {percent(item.historical_frequency)}</span>
+                  )}
+                  {item.deterministic_risk_score !== undefined && (
+                    <span> · Deterministic risk: {item.deterministic_risk_score.toFixed(2)}</span>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
       </div>
+
+      {uncertainty && (
+        <div className="card" style={{ marginTop: '0.75rem', padding: '0.75rem' }}>
+          <strong>
+            Prediction Uncertainty: {pretty(uncertainty.level)}
+          </strong>{' '}
+          <small>
+            (top-1 margin: {uncertainty.top_1_margin.toFixed(3)} · normalized entropy:{' '}
+            {uncertainty.normalized_entropy.toFixed(3)})
+          </small>
+          <p className="fi-note" style={{ margin: '0.25rem 0 0' }}>
+            {uncertainty.calibration_note}
+          </p>
+        </div>
+      )}
 
       <section className="fi-why card" aria-label="Why this prediction">
         <h4>WHY THIS PREDICTION</h4>
@@ -363,6 +411,7 @@ function PredictionOutput({ prediction }: { prediction: ResearchPrediction }) {
                 </span>
                 <small>
                   {feature.direction} · contribution {feature.contribution}
+                  {feature.description ? ` — ${feature.description}` : ''}
                 </small>
               </li>
             ))}
@@ -396,6 +445,11 @@ export function MistiqFailureIntelligence({
     prediction?: string
   }>({})
   const [refreshedAt, setRefreshedAt] = useState<string | null>(null)
+  const [onDemandCodeIntel, setOnDemandCodeIntel] = useState<CodeIntelligencePreview | null>(null)
+  const [codeIntelLoading, setCodeIntelLoading] = useState(false)
+  const [remediationResult, setRemediationResult] = useState<RemediationResponse | null>(null)
+  const [remediationBusy, setRemediationBusy] = useState(false)
+  const [remediationError, setRemediationError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -480,11 +534,72 @@ export function MistiqFailureIntelligence({
     ? openFindings.filter(item => item.category === topPredicted).slice(0, 5)
     : []
 
+  const activeCodeIntel = onDemandCodeIntel || prediction?.code_intelligence || null
+  const riskRegions: CodeIntelligenceRiskRegion[] = activeCodeIntel?.top_risk_regions || []
+
+  async function handleLoadCodeIntelligence() {
+    setCodeIntelLoading(true)
+    try {
+      const res = await getCodeIntelligence(projectId)
+      setOnDemandCodeIntel({
+        available: res.available,
+        summary: res.summary,
+        top_risk_regions: res.risk_regions || res.top_risk_regions || [],
+      })
+    } catch {
+      // Ignore error if unavailable
+    } finally {
+      setCodeIntelLoading(false)
+    }
+  }
+
+  async function handleRemediateRegion(region: CodeIntelligenceRiskRegion) {
+    setRemediationBusy(true)
+    setRemediationError(null)
+    try {
+      const res = await requestRemediation(projectId, {
+        file: region.file,
+        start_line: region.start_line,
+        end_line: region.end_line,
+        category: region.category,
+        title: region.title,
+        explanation: region.explanation,
+        state: region.state,
+      })
+      setRemediationResult(res)
+    } catch (err) {
+      setRemediationError(err instanceof Error ? err.message : 'Unable to generate remediation.')
+    } finally {
+      setRemediationBusy(false)
+    }
+  }
+
+  async function handleRemediateFinding(finding: FailureHistoryRow) {
+    setRemediationBusy(true)
+    setRemediationError(null)
+    try {
+      const res = await requestRemediation(projectId, {
+        file: finding.file,
+        start_line: finding.line,
+        end_line: finding.line,
+        category: finding.category,
+        title: `${pretty(finding.category)} finding`,
+        explanation: finding.evidence,
+        state: finding.file && finding.line ? 'verified_finding' : 'unknown_insufficient_evidence',
+      })
+      setRemediationResult(res)
+    } catch (err) {
+      setRemediationError(err instanceof Error ? err.message : 'Unable to generate remediation.')
+    } finally {
+      setRemediationBusy(false)
+    }
+  }
+
   if (!history && !errors.history) {
     return (
-      <section className="card fi-card" aria-label="MISTIQ-APR Failure Intelligence">
+      <section className="card fi-card" aria-label="Apex-APR Failure Intelligence">
         <div className="fi-loading-box">
-          <span className="card-kicker">MISTIQ-APR</span>
+          <span className="card-kicker">Apex-APR</span>
           <h2>Failure Intelligence</h2>
           <p className="fi-intro">{PREDICTION_INTRO}</p>
           <div className="loading-state">
@@ -497,10 +612,10 @@ export function MistiqFailureIntelligence({
   }
 
   return (
-    <section className="card fi-card" aria-label="MISTIQ-APR Failure Intelligence">
+    <section className="card fi-card" aria-label="Apex-APR Failure Intelligence">
       <header className="fi-header">
         <div>
-          <span className="card-kicker">MISTIQ-APR</span>
+          <span className="card-kicker">Apex-APR</span>
           <h2>Failure Intelligence</h2>
           <p className="fi-intro">{PREDICTION_INTRO}</p>
         </div>
@@ -601,6 +716,7 @@ export function MistiqFailureIntelligence({
                 key={finding.fingerprint}
                 finding={finding}
                 reviewCount={summary?.review_count || findings.length}
+                onRemediate={handleRemediateFinding}
               />
             ))}
           </div>
@@ -773,7 +889,7 @@ export function MistiqFailureIntelligence({
             <p className="fi-state-message">{NO_HISTORY_YET}</p>
             {researchStatus && (
               <p className="fi-meta">
-                MISTIQ-APR model: {researchStatus.model_status}
+                Apex-APR model: {researchStatus.model_status}
                 {researchStatus.model_detail ? ` — ${researchStatus.model_detail}` : ''} ·
                 dataset {researchStatus.status}
               </p>
@@ -790,7 +906,7 @@ export function MistiqFailureIntelligence({
             <p className="fi-state-message">
               Failure history exists ({summary?.open_failure_count ?? 0} open,{' '}
               {summary?.resolved_failure_count ?? 0} resolved across{' '}
-              {summary?.review_count ?? 0} reviews), but no trained MISTIQ-APR model is available for this dataset, so next-failure prediction is withheld rather than guessed.
+              {summary?.review_count ?? 0} reviews), but no trained Apex-APR model is available for this dataset, so next-failure prediction is withheld rather than guessed.
             </p>
             <RequirementList status={researchStatus} />
           </div>
@@ -802,7 +918,7 @@ export function MistiqFailureIntelligence({
           <div className="fi-state-content card">
             <p className="fi-state-message">Not available yet</p>
             <p className="fi-state-message">
-              A trained MISTIQ-APR artifact exists, but no prediction could be produced for this project.
+              A trained Apex-APR artifact exists, but no prediction could be produced for this project.
             </p>
             <p className="fi-state-message">{NO_HISTORY_YET}</p>
             <ul className="fi-requirements">
@@ -871,6 +987,138 @@ export function MistiqFailureIntelligence({
           )}
         </div>
       </div>
+
+      {/* SECTION 5: CODE-LEVEL RISK LOCALIZATION & AI-ASSISTED REMEDIATION */}
+      {(activeCodeIntel?.available || remediationResult || remediationBusy || remediationError) && (
+        <div className="fi-section">
+          <div className="fi-section-head">
+            <h3>CODE-LEVEL RISK LOCALIZATION & AI REMEDIATION</h3>
+            {!activeCodeIntel?.available && (
+              <button
+                type="button"
+                className="button secondary"
+                disabled={codeIntelLoading}
+                onClick={handleLoadCodeIntelligence}
+              >
+                {codeIntelLoading ? 'Indexing repository…' : 'Scan source lines'}
+              </button>
+            )}
+          </div>
+
+          {activeCodeIntel?.summary && (
+            <p className="fi-note">
+              Indexed {activeCodeIntel.summary.indexed_files} files ({activeCodeIntel.summary.total_lines} lines,{' '}
+              {activeCodeIntel.summary.total_symbols} symbols) ·{' '}
+              {activeCodeIntel.summary.verified_line_findings_count} verified line findings ·{' '}
+              {activeCodeIntel.summary.localized_risk_regions_count} localized review candidates.
+            </p>
+          )}
+
+          {riskRegions.length > 0 && (
+            <div className="fi-timeline" style={{ marginTop: '0.75rem' }}>
+              {riskRegions.map((region, idx) => (
+                <details className="fi-timeline-item card" key={`${region.file}:${region.start_line}:${idx}`}>
+                  <summary className="fi-timeline-summary">
+                    <div className="fi-summary-badges">
+                      <Badge value={region.severity} />
+                      <span className="live-badge">
+                        {EVIDENCE_STATE_LABEL[region.state] || pretty(region.state)}
+                      </span>
+                    </div>
+                    <strong className="fi-summary-category">
+                      {region.file}:{region.start_line}
+                      {region.end_line && region.end_line !== region.start_line ? `–${region.end_line}` : ''}
+                    </strong>
+                    <span className="fi-occurrence">{region.title}</span>
+                    <span className="fi-summary-chevron">▾</span>
+                  </summary>
+                  <div className="fi-timeline-body">
+                    <p>{region.explanation}</p>
+                    {region.signals && region.signals.length > 0 && (
+                      <ul>
+                        {region.signals.map(sig => (
+                          <li key={sig}>{sig}</li>
+                        ))}
+                      </ul>
+                    )}
+                    {region.code_excerpt && (
+                      <pre style={{ overflowX: 'auto', padding: '0.5rem', fontSize: '0.8rem' }}>
+                        <code>{region.code_excerpt}</code>
+                      </pre>
+                    )}
+                    <button
+                      type="button"
+                      className="button secondary"
+                      disabled={remediationBusy}
+                      onClick={() => handleRemediateRegion(region)}
+                    >
+                      {remediationBusy ? 'Generating remediation…' : 'Generate AI Remediation'}
+                    </button>
+                  </div>
+                </details>
+              ))}
+            </div>
+          )}
+
+          {remediationError && (
+            <div className="fi-error" role="alert" style={{ marginTop: '0.75rem' }}>
+              <strong>Remediation error</strong>
+              <p>{remediationError}</p>
+            </div>
+          )}
+
+          {remediationResult && (
+            <div className="card" style={{ marginTop: '1rem', padding: '1rem' }} aria-label="AI-assisted remediation">
+              <h4>
+                AI-ASSISTED REMEDIATION ({remediationResult.provider === 'groq' ? `Groq · ${remediationResult.model}` : 'Deterministic Evidence Fallback'})
+              </h4>
+              <p className="fi-note">{remediationResult.message}</p>
+              <dl>
+                <dt>Summary</dt>
+                <dd>{remediationResult.remediation.summary}</dd>
+                <dt>Why it matters</dt>
+                <dd>{remediationResult.remediation.why_it_matters}</dd>
+                <dt>Evidence references</dt>
+                <dd>{remediationResult.remediation.evidence_references.join(', ') || 'Project scope'}</dd>
+                <dt>Suggested fix</dt>
+                <dd>{remediationResult.remediation.suggested_fix}</dd>
+              </dl>
+              {remediationResult.remediation.patch && (
+                <div style={{ marginTop: '0.75rem' }}>
+                  <strong>Suggested Patch Preview (Human Review Only · Auto-Applied: No)</strong>
+                  <pre style={{ overflowX: 'auto', padding: '0.75rem', fontSize: '0.8rem' }}>
+                    <code>{remediationResult.remediation.patch}</code>
+                  </pre>
+                  <small className="fi-note">
+                    Patch validation: {remediationResult.patch_validation.status} · Grounding verified:{' '}
+                    {remediationResult.grounding_validation.passed ? 'Yes' : 'No'}
+                  </small>
+                </div>
+              )}
+              {remediationResult.remediation.tests_to_add.length > 0 && (
+                <div style={{ marginTop: '0.5rem' }}>
+                  <strong>Tests to add:</strong>
+                  <ul>
+                    {remediationResult.remediation.tests_to_add.map(t => (
+                      <li key={t}>{t}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {remediationResult.remediation.validation_steps.length > 0 && (
+                <div style={{ marginTop: '0.5rem' }}>
+                  <strong>Validation steps:</strong>
+                  <ul>
+                    {remediationResult.remediation.validation_steps.map(step => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   )
 }

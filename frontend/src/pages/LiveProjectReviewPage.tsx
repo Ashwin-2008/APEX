@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { connectProject, getFailureHistory, stopMonitoring } from '../services/projectReviewApi'
+import { fetchProjectFindings } from '../api/projectsApi'
 import { useProjectEvents, type ProjectEvent } from '../hooks/useProjectEvents'
 import { MistiqFailureIntelligence } from '../components/MistiqFailureIntelligence'
 import { ConnectScreen } from '../components/projectReview/ConnectScreen'
@@ -10,11 +11,13 @@ import { ProblemsSection } from '../components/projectReview/ProblemsSection'
 import { RecentlyFixed, resolvedFromHistory, type ResolvedView } from '../components/projectReview/RecentlyFixed'
 import { RequirementsSection } from '../components/projectReview/RequirementsSection'
 import { RecommendationsSection } from '../components/projectReview/RecommendationsSection'
+import { AnalysisCoverageCard } from '../components/AnalysisCoverageCard'
+import { FindingSuppressionModal } from '../components/FindingSuppressionModal'
 import { applyFindingEvent, dedupeActiveFindings, dedupeRecommendations, findingDisplayKey, seedFindings, type DedupableFinding } from '../utils/findingDedup'
 import { appendActivity, categoryNoun, categoryTitle, severityLabel, translateEvent, type ActivityEntry } from '../utils/labels'
 import { persistProjectContext, recordProjectNotification } from '../utils/projectNotifications'
 import { useProject } from '../context/ProjectContext'
-import type { FailureEvent, FailureHistoryRow, ProjectReview } from '../types/projectReview'
+import type { FailureEvent, FailureHistoryRow, ProjectFindingItem, ProjectReview } from '../types/projectReview'
 import '../styles/liveProjectReview.css'
 
 interface ResolvedPayload {
@@ -50,7 +53,7 @@ function OnboardingSteps({ steps, onDismiss }: { steps: Array<{ label: string; d
       </ol>
       {allDone && (
         <div className="pr-onboarding-done">
-          <p>Your project is now being monitored. Save a file to see MISTIQ-APR analyze the change automatically.</p>
+          <p>Your project is now being monitored. Save a file to see Apex-APR analyze the change automatically.</p>
           <button type="button" className="button button-sm" onClick={onDismiss}>Got it</button>
         </div>
       )}
@@ -78,6 +81,9 @@ export function LiveProjectReviewPage() {
   const [historyError, setHistoryError] = useState('')
   const [historyLoaded, setHistoryLoaded] = useState(false)
   const [repositoryPath, setRepositoryPath] = useState('')
+
+  const [dbFindings, setDbFindings] = useState<ProjectFindingItem[]>([])
+  const [suppressTarget, setSuppressTarget] = useState<ProjectFindingItem | null>(null)
 
   const [branch, setBranch] = useState<string | null>(null)
   const [commitSha, setCommitSha] = useState<string | null>(null)
@@ -119,8 +125,12 @@ export function LiveProjectReviewPage() {
         break
       case 'analysis.completed':
         setAnalyzing(false)
+        setAnalysisError('')
         setLastChecked(new Date().toLocaleTimeString())
-        setRefreshToken(token => token + 1)
+        if (event.failure_dna && typeof event.failure_dna === 'object') {
+          setFailureDna(event.failure_dna as Record<string, number>)
+        }
+        setRefreshToken(v => v + 1)
         break
       case 'analysis.failed':
         setAnalyzing(false)
@@ -134,10 +144,25 @@ export function LiveProjectReviewPage() {
           setFailureDna(event.failure_dna as Record<string, number>)
         }
         break
-      case 'monitoring.status': {
-        const nextStatus = readString(event.status)
-        setMonitoringPaused(nextStatus !== 'active')
-        if (nextStatus) updateProject({ monitoringStatus: nextStatus })
+      case 'finding.created':
+      case 'finding.detected':
+      case 'finding.persistent':
+      case 'finding.reopened': {
+        const rawFinding = (event.finding || event) as Record<string, unknown>
+        const finding: FailureEvent = {
+          category: readString(rawFinding.category) || 'Unknown',
+          severity: (readString(rawFinding.severity) as FailureEvent['severity']) || 'medium',
+          confidence: typeof rawFinding.confidence === 'number' ? rawFinding.confidence : 0.8,
+          timestamp: readString(rawFinding.timestamp) || new Date().toISOString(),
+          evidence: readString(rawFinding.evidence) || '',
+          analyzer_source: readString(rawFinding.analyzer_source) || 'live-watcher',
+          status: event.type === 'finding.reopened' ? 'REOPENED' : 'ACTIVE',
+          remediation: readString(rawFinding.remediation) || '',
+          component: readString(rawFinding.component) || undefined,
+          file: readString(rawFinding.file) || undefined,
+          line: typeof rawFinding.line === 'number' ? rawFinding.line : undefined,
+        }
+        setFindings(previous => applyFindingEvent(previous, finding, event.type))
         break
       }
       case 'finding.resolved': {
@@ -167,7 +192,7 @@ export function LiveProjectReviewPage() {
           title: known ? categoryTitle(known) : (payload.category ? `${categoryNoun(payload.category)} issue` : 'Issue resolved'),
           location: {
             file: payload.file ?? known?.file ?? null,
-            line: known?.line ?? null,
+            line: (payload as unknown as { line?: number | null }).line ?? known?.line ?? null,
             component: payload.component ?? known?.component ?? null,
             evidence: known?.evidence ?? '',
           },
@@ -179,9 +204,20 @@ export function LiveProjectReviewPage() {
         setSseResolved(previous => new Map(previous).set(view.key, view))
         break
       }
+      case 'monitoring.status': {
+        const nextStatus = readString(event.status)
+        setMonitoringPaused(nextStatus !== 'active')
+        if (nextStatus) updateProject({ monitoringStatus: nextStatus })
+        break
+      }
+      case 'monitoring.stopped':
+        setMonitoringPaused(true)
+        updateProject({ monitoringStatus: 'paused' })
+        break
       default: {
         const finding = event.finding as FailureEvent | undefined
         if (finding) setFindings(previous => applyFindingEvent(previous, finding as DedupableFinding, event.type))
+        break
       }
     }
   }
@@ -195,7 +231,9 @@ export function LiveProjectReviewPage() {
       .then(result => {
         if (cancelled) return
         const index = new Map<string, FailureHistoryRow>()
-        for (const row of result.findings) index.set(findingDisplayKey(row), row)
+        for (const item of result.findings) {
+          index.set(findingDisplayKey(item), item)
+        }
         setHistoryIndex(index)
         setHistoryResolved(resolvedFromHistory(result.findings))
         setRepositoryPath(result.project?.repository_path || '')
@@ -205,6 +243,13 @@ export function LiveProjectReviewPage() {
       .catch(exception => {
         if (!cancelled) setHistoryError(exception instanceof Error ? exception.message : 'Failure history could not be loaded.')
       })
+
+    fetchProjectFindings(projectId)
+      .then(items => {
+        if (!cancelled) setDbFindings(items)
+      })
+      .catch(() => {})
+
     return () => { cancelled = true }
   }, [projectId, refreshToken])
 
@@ -254,6 +299,37 @@ export function LiveProjectReviewPage() {
       setStopError(exception instanceof Error ? exception.message : 'Monitoring could not be stopped.')
     } finally {
       setStopping(false)
+    }
+  }
+
+  const handleOpenSuppress = (finding: DedupableFinding) => {
+    const key = findingDisplayKey(finding)
+    const historyItem = historyIndex.get(key)
+    const matched = dbFindings.find(f =>
+      (historyItem?.fingerprint && f.fingerprint === historyItem.fingerprint) ||
+      (f.file === finding.file && f.category === finding.category)
+    )
+
+    if (matched) {
+      setSuppressTarget(matched)
+    } else {
+      const fallbackItem: ProjectFindingItem = {
+        id: dbFindings.length > 0 ? dbFindings[0].id : 1,
+        review_id: 0,
+        category: finding.category,
+        severity: finding.severity,
+        confidence: finding.confidence ?? 0.8,
+        component: finding.component,
+        file: finding.file,
+        line: finding.line,
+        evidence: finding.evidence || '',
+        analyzer_source: finding.analyzer_source || '',
+        remediation: finding.remediation || '',
+        status: finding.status || 'ACTIVE',
+        fingerprint: historyItem?.fingerprint || '',
+        suppressed: false,
+      }
+      setSuppressTarget(fallbackItem)
     }
   }
 
@@ -350,13 +426,24 @@ export function LiveProjectReviewPage() {
       <div className={`pr-grid project-review-view project-review-${activeTab}`}>
         {activeTab === 'overview' && (
           <>
-            <ProblemsSection findings={activeFindings.slice(0, 5)} historyIndex={historyIndex} />
+            <AnalysisCoverageCard projectId={projectId} />
+            <ProblemsSection
+              findings={activeFindings.slice(0, 5)}
+              historyIndex={historyIndex}
+              onSuppress={handleOpenSuppress}
+            />
             <ActivityFeed entries={activity.slice(0, 8)} />
             <RecommendationsSection recommendations={recommendations.slice(0, 5)} />
           </>
         )}
         {activeTab === 'changes' && <ActivityFeed entries={activity} />}
-        {activeTab === 'problems' && <ProblemsSection findings={activeFindings} historyIndex={historyIndex} />}
+        {activeTab === 'problems' && (
+          <ProblemsSection
+            findings={activeFindings}
+            historyIndex={historyIndex}
+            onSuppress={handleOpenSuppress}
+          />
+        )}
         {activeTab === 'fixed' && <RecentlyFixed items={resolvedViews} />}
         {activeTab === 'requirements' && <RequirementsSection projectId={projectId} refreshToken={refreshToken} />}
         {activeTab === 'next' && <RecommendationsSection recommendations={recommendations.slice(0, 5)} />}
@@ -370,6 +457,20 @@ export function LiveProjectReviewPage() {
           />
         )}
       </div>
+
+      {/* FINDING SUPPRESSION / FALSE POSITIVE MODAL */}
+      {suppressTarget && (
+        <FindingSuppressionModal
+          isOpen={Boolean(suppressTarget)}
+          finding={suppressTarget}
+          projectId={projectId}
+          onClose={() => setSuppressTarget(null)}
+          onSuppressed={() => {
+            setRefreshToken(v => v + 1)
+            setSuppressTarget(null)
+          }}
+        />
+      )}
     </div>
   )
 }

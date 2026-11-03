@@ -4,11 +4,19 @@ An artifact is only ever marked valid when it was trained on sufficient data
 under the walk-forward protocol. Loading validates the bundle structure,
 feature schema, category mapping, and training metadata; anything else is
 treated as unavailable rather than used for prediction.
+
+Production artifact protection:
+- The original ``backend/ml/artifacts/mistiq_apr/model.pkl`` and
+  ``model_metadata.json`` are write-protected and never overwritten in-place.
+- Active production model resolution consults
+  ``backend/ml/artifacts/mistiq_apr/production/production_manifest.json`` when
+  present, falling back to ``artifacts_root() / "model.pkl"``.
 """
 from __future__ import annotations
 
 import json
 import pickle
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +30,9 @@ from .constants import (
 ARTIFACTS_ROOT = Path("backend/ml/artifacts/mistiq_apr")
 MODEL_FILENAME = "model.pkl"
 METADATA_FILENAME = "model_metadata.json"
+PRODUCTION_MANIFEST_REL = Path("production") / "production_manifest.json"
+
+_PROTECTED_CANONICAL_DIR = (Path(__file__).resolve().parents[1] / "artifacts" / "mistiq_apr").resolve()
 
 
 def artifacts_root() -> Path:
@@ -29,11 +40,43 @@ def artifacts_root() -> Path:
     return Path(ARTIFACTS_ROOT)
 
 
+def _is_canonical_root(root: Path) -> bool:
+    try:
+        return root.resolve() == _PROTECTED_CANONICAL_DIR
+    except OSError:
+        return False
+
+
 def model_path() -> Path:
-    return artifacts_root() / MODEL_FILENAME
+    root = artifacts_root()
+    if _is_canonical_root(root):
+        manifest_file = root / PRODUCTION_MANIFEST_REL
+        if manifest_file.is_file():
+            try:
+                manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+                active_rel = manifest.get("active_model_relpath")
+                if active_rel:
+                    candidate_target = (root / str(active_rel)).resolve()
+                    if candidate_target.is_file():
+                        return candidate_target
+                active_abs = manifest.get("active_model_path")
+                if active_abs:
+                    abs_target = Path(str(active_abs))
+                    if abs_target.is_file():
+                        return abs_target
+            except Exception:
+                pass
+    return root / MODEL_FILENAME
 
 
 def metadata_path() -> Path:
+    m_path = model_path()
+    sidecar = m_path.parent / METADATA_FILENAME
+    if sidecar.is_file():
+        return sidecar
+    alt_sidecar = m_path.parent / "metadata.json"
+    if alt_sidecar.is_file():
+        return alt_sidecar
     return artifacts_root() / METADATA_FILENAME
 
 
@@ -58,8 +101,26 @@ class MISTIQAPRModelArtifact:
 
 
 def save_mistiq_apr_artifact(artifact: MISTIQAPRModelArtifact, path: str | Path | None = None) -> Path:
-    """Persist the artifact bundle plus a human-readable metadata sidecar."""
-    target = Path(path) if path is not None else model_path()
+    """Persist the artifact bundle plus a human-readable metadata sidecar.
+
+    Write-protection guard: if ``target`` resolves to the existing canonical
+    ``backend/ml/artifacts/mistiq_apr/model.pkl``, the write is redirected to an
+    immutable candidate directory under ``candidates/`` so the original v1.0
+    production model is never overwritten in-place.
+    """
+    target = Path(path) if path is not None else (artifacts_root() / MODEL_FILENAME)
+    protected_model = (_PROTECTED_CANONICAL_DIR / MODEL_FILENAME).resolve()
+    try:
+        is_protected_existing = target.resolve() == protected_model and protected_model.exists()
+    except OSError:
+        is_protected_existing = False
+
+    if is_protected_existing:
+        ts_slug = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        dataset_hash_short = str((artifact.metadata or {}).get("dataset_hash") or "cand")[:8]
+        cand_dir = _PROTECTED_CANONICAL_DIR / "candidates" / f"candidate_{ts_slug}_{dataset_hash_short}"
+        target = cand_dir / MODEL_FILENAME
+
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(pickle.dumps(artifact))
     sidecar = target.parent / METADATA_FILENAME
@@ -122,9 +183,14 @@ def artifact_status(path: str | Path | None = None) -> dict[str, Any]:
     artifact, reason = load_valid_artifact(target)
     if artifact is None:
         return {"exists": True, "valid": False, "reason": reason, "metadata": None}
-    return {"exists": True, "valid": True, "reason": None, "metadata": artifact.metadata}
+    return {
+        "exists": True,
+        "valid": True,
+        "reason": None,
+        "active_path": str(target),
+        "metadata": artifact.metadata,
+    }
 
 
 def default_feature_groups() -> dict[str, list[str]]:
     return {name: list(block) for name, block in FEATURE_BLOCKS.items()}
-

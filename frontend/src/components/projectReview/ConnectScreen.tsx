@@ -52,7 +52,7 @@ export function ConnectScreen({
       <div className="pr-connect-hero">
         <div className="pr-connect-badge">
           <ZapIcon size={12} className="inline mr-1 text-primary" />
-          <span>MISTIQ-APR 2.0</span>
+          <span>ApexIQ 2.0</span>
         </div>
         <h1>CONNECT YOUR PROJECT</h1>
         <p className="pr-connect-tagline">
@@ -163,7 +163,7 @@ export function ConnectScreen({
 
             <p className="live-note">
               <ShieldIcon size={13} className="inline mr-1 text-primary" />
-              MISTIQ analyzes deterministic evidence first. Monitoring starts automatically after the initial analysis completes.
+              ApexIQ analyzes deterministic evidence first. Monitoring starts automatically after the initial analysis completes.
             </p>
           </div>
         </div>

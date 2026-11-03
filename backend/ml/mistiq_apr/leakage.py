@@ -14,12 +14,13 @@ Checks verified:
 5. Cross-project leakage — the same project may appear in training and testing
                          only when its training observations are strictly
                          earlier than its test observations (documented as an
-                         explicit warning when it occurs).
+                         explicit warning when it occurs), or forbidden outright
+                         when ``require_disjoint_repo_groups=True``.
 """
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone
 
 from .dataset import Observation
 from .temporal import WalkForwardSplit
@@ -32,7 +33,10 @@ CHECK_CROSS_PROJECT = "cross_project_leakage"
 
 
 def _parse(timestamp: str) -> datetime:
-    return datetime.fromisoformat(timestamp)
+    dt = datetime.fromisoformat(timestamp)
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 def _check(name: str, status: str, detail: str) -> dict:
@@ -43,12 +47,15 @@ def validate_leakage(
     observations: list[Observation],
     splits: list[WalkForwardSplit] | None = None,
     preprocessing_reports: list[dict] | None = None,
+    *,
+    require_disjoint_repo_groups: bool = False,
 ) -> dict:
     """Run every leakage check and return a structured pass/fail report.
 
     ``passed`` is False when any check reports an error; evaluation must not run
     in that case. ``warnings`` document accepted-by-policy conditions such as
-    strictly-earlier same-project observations in both train and test.
+    strictly-earlier same-project observations in both train and test, duplicate
+    feature vectors across synthetic test runs, or multi-label exploded targets.
     """
     checks: list[dict] = []
     errors: list[str] = []
@@ -68,6 +75,11 @@ def validate_leakage(
                     f"project {row.project_id} review {row.review_id}: feature timestamp "
                     f"{row.feature_max_timestamp} is later than observation timestamp {row.timestamp}"
                 )
+            if row.target_timestamp is not None and _parse(row.target_timestamp) < _parse(row.timestamp):
+                temporal_errors.append(
+                    f"project {row.project_id} review {row.review_id}: target timestamp "
+                    f"{row.target_timestamp} precedes observation timestamp {row.timestamp}"
+                )
         except ValueError:
             temporal_errors.append(
                 f"project {row.project_id} review {row.review_id}: unparseable timestamp"
@@ -76,10 +88,13 @@ def validate_leakage(
         checks.append(_check(CHECK_TEMPORAL, "failed", "; ".join(temporal_errors[:5])))
         errors.extend(temporal_errors)
     else:
-        checks.append(_check(
-            CHECK_TEMPORAL, "passed",
-            f"All {len(observations)} observations carry feature timestamps at or before their observation time.",
-        ))
+        checks.append(
+            _check(
+                CHECK_TEMPORAL,
+                "passed",
+                f"All {len(observations)} observations carry feature timestamps at or before their observation time.",
+            )
+        )
 
     # 2. Target leakage: target review must not feed the feature construction.
     target_errors: list[str] = []
@@ -95,10 +110,13 @@ def validate_leakage(
         checks.append(_check(CHECK_TARGET, "failed", "; ".join(target_errors[:5])))
         errors.extend(target_errors)
     else:
-        checks.append(_check(
-            CHECK_TARGET, "passed",
-            "No next-review target review appears in any feature construction.",
-        ))
+        checks.append(
+            _check(
+                CHECK_TARGET,
+                "passed",
+                "No next-review target review appears in any feature construction.",
+            )
+        )
 
     # 3. Duplicate observations: project_id + review_id + target must be unique.
     counts = Counter(row.key for row in observations)
@@ -111,18 +129,38 @@ def validate_leakage(
         checks.append(_check(CHECK_DUPLICATES, "failed", detail))
         errors.append(f"duplicate observations detected: {detail}")
     else:
-        checks.append(_check(
-            CHECK_DUPLICATES, "passed",
-            f"All {len(observations)} observations are unique on (project_id, review_id, target).",
-        ))
+        checks.append(
+            _check(
+                CHECK_DUPLICATES,
+                "passed",
+                f"All {len(observations)} observations are unique on (project_id, review_id, target).",
+            )
+        )
+
+    # Check for cross-project duplicate (feature_hash, target) or synthetic contamination as warnings
+    if observations:
+        ft_counts = Counter((row.feature_hash, row.target) for row in observations)
+        dup_ft = sum(c - 1 for c in ft_counts.values() if c > 1)
+        if dup_ft > 0:
+            warnings.append(
+                f"{dup_ft} of {len(observations)} observations share identical (feature_vector, target) pairs across transitions or projects."
+            )
+        synthetic_cnt = sum(1 for row in observations if row.is_synthetic)
+        if synthetic_cnt > 0:
+            warnings.append(
+                f"{synthetic_cnt} of {len(observations)} observations originate from synthetic/temporary test directories."
+            )
 
     # 4. Future preprocessing leakage: scalers/encoders fitted on training rows only.
     if preprocessing_reports is None:
-        checks.append(_check(
-            CHECK_PREPROCESSING, "skipped",
-            "No preprocessing objects exist at this stage; train-only fitting is "
-            "verified numerically whenever the evaluation fits a model.",
-        ))
+        checks.append(
+            _check(
+                CHECK_PREPROCESSING,
+                "skipped",
+                "No preprocessing objects exist at this stage; train-only fitting is "
+                "verified numerically whenever the evaluation fits a model.",
+            )
+        )
     else:
         preprocessing_errors: list[str] = []
         for report in preprocessing_reports:
@@ -142,23 +180,40 @@ def validate_leakage(
             checks.append(_check(CHECK_PREPROCESSING, "failed", "; ".join(preprocessing_errors[:5])))
             errors.extend(preprocessing_errors)
         else:
-            checks.append(_check(
-                CHECK_PREPROCESSING, "passed",
-                f"All {len(preprocessing_reports)} fitted preprocessing objects were verified "
-                "against a train-only refit.",
-            ))
+            checks.append(
+                _check(
+                    CHECK_PREPROCESSING,
+                    "passed",
+                    f"All {len(preprocessing_reports)} fitted preprocessing objects were verified "
+                    "against a train-only refit.",
+                )
+            )
 
     # 5. Cross-project leakage policy: same project in train and test is only
-    # acceptable when its training observations are strictly earlier.
+    # acceptable when its training observations are strictly earlier (unless
+    # require_disjoint_repo_groups=True).
     if not splits:
-        checks.append(_check(
-            CHECK_CROSS_PROJECT, "skipped",
-            "Split-level check runs together with walk-forward split generation.",
-        ))
+        checks.append(
+            _check(
+                CHECK_CROSS_PROJECT,
+                "skipped",
+                "Split-level check runs together with walk-forward split generation.",
+            )
+        )
     else:
         cross_errors: list[str] = []
         overlapping: set[int] = set()
         for split in splits:
+            if require_disjoint_repo_groups:
+                train_groups = {r.repository_group or f"project:{r.project_id}" for r in split.train}
+                test_groups = {r.repository_group or f"project:{r.project_id}" for r in split.test}
+                shared_groups = sorted(train_groups & test_groups)
+                if shared_groups:
+                    cross_errors.append(
+                        f"repository group(s) {shared_groups} appear in both train and test at split {split.index}"
+                    )
+                    continue
+
             train_times: dict[int, list[str]] = {}
             test_times: dict[int, list[str]] = {}
             for row in split.train:
@@ -192,10 +247,13 @@ def validate_leakage(
             checks.append(_check(CHECK_CROSS_PROJECT, "passed", detail))
             warnings.append(detail)
         else:
-            checks.append(_check(
-                CHECK_CROSS_PROJECT, "passed",
-                "No project appears in both training and test sets.",
-            ))
+            checks.append(
+                _check(
+                    CHECK_CROSS_PROJECT,
+                    "passed",
+                    "No project appears in both training and test sets.",
+                )
+            )
 
     return {
         "passed": not errors,
@@ -203,5 +261,3 @@ def validate_leakage(
         "errors": errors,
         "warnings": warnings,
     }
-
-

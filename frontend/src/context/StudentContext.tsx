@@ -22,7 +22,7 @@ export function StudentProvider({ children }: { children: ReactNode }) {
     if (!saved) { setReady(true); return }
     getStudent(Number(saved)).then(setStudent).catch(() => {
       localStorage.removeItem(STORAGE_KEY)
-      setRestoreError('MISTIQ could not restore your student profile. Check that the backend is running, then reconnect with your student ID.')
+      setRestoreError('ApexIQ could not restore your student profile. Check that the backend is running, then reconnect with your student ID.')
     }).finally(() => setReady(true))
   }, [])
 

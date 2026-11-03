@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { NavLink, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { useStudent } from '../context/StudentContext'
+import { useAuth } from '../context/AuthContext'
 import { useTheme } from '../context/ThemeContext'
 import { useProject } from '../context/ProjectContext'
 import { LoadingState } from '../components'
-import { NotificationCenter } from '../components/NotificationCenter'
-import { getProjectNotifications } from '../utils/projectNotifications'
+import { ProjectSwitcher } from '../components/ProjectSwitcher'
+import { GlobalNotificationDrawer } from '../components/GlobalNotificationDrawer'
+import { ConnectionWizardModal } from '../components/ConnectionWizardModal'
 import {
   DashboardIcon,
   ProjectReviewIcon,
@@ -21,33 +23,22 @@ import {
   GitCommitIcon,
   FolderIcon,
   GithubIcon,
-  BellIcon,
   ZapIcon,
 } from '../components/ui/Icons'
 
 export function AppLayout() {
-  const { student, ready, leave } = useStudent()
+  const { student, ready: studentReady, leave } = useStudent()
+  const { user, loading: authLoading, logout } = useAuth()
   const { preference, setPreference } = useTheme()
   const { project, isConnected } = useProject()
   const location = useLocation()
 
   const [headerThemeDropdown, setHeaderThemeDropdown] = useState(false)
   const [sidebarThemeDropdown, setSidebarThemeDropdown] = useState(false)
-  const [notifOpen, setNotifOpen] = useState(false)
-  const [notifCount, setNotifCount] = useState<number>(() => {
-    return getProjectNotifications().filter(item => !item.seen).length
-  })
+  const [showConnectWizard, setShowConnectWizard] = useState(false)
 
-  useEffect(() => {
-    const handleStorage = () => {
-      setNotifCount(getProjectNotifications().filter(item => !item.seen).length)
-    }
-    window.addEventListener('storage', handleStorage)
-    return () => window.removeEventListener('storage', handleStorage)
-  }, [])
-
-  if (!ready) return <LoadingState label="Restoring engineering workspace…" />
-  if (!student) return <Navigate to="/login" replace state={{ from: location.pathname }} />
+  if (!studentReady || authLoading) return <LoadingState label="Restoring engineering workspace…" />
+  if (!student && !user) return <Navigate to="/login" replace state={{ from: location.pathname }} />
 
   const hasConnectedProject = Boolean(isConnected && project && project.name)
   const projectName = project?.name || ''
@@ -56,7 +47,24 @@ export function AppLayout() {
   const commit = project?.commitSha ? project.commitSha.slice(0, 7) : null
   const isMonitoring = project?.monitoringStatus !== 'paused' && project?.monitoringStatus !== 'stopped'
 
+  const displayName = user?.full_name || user?.username || student?.name || 'Engineer'
+  const userInitial = displayName.slice(0, 1).toUpperCase()
+
+  const handleSignOut = () => {
+    logout()
+    leave()
+  }
+
   const workspaceLinks = [
+    { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon },
+    { to: '/projects', label: 'Workspace Projects', icon: FolderIcon },
+    { to: '/project-review', label: 'Project Review', icon: ProjectReviewIcon },
+    { to: '/progress', label: 'Project Evolution', icon: EvolutionIcon },
+    { to: '/mistakes', label: 'Engineering Failures', icon: FailuresIcon },
+    { to: '/activity', label: 'Live Activity', icon: ZapIcon },
+  ]
+
+  const mobileLinks = [
     { to: '/dashboard', label: 'Dashboard', icon: DashboardIcon },
     { to: '/project-review', label: 'Project Review', icon: ProjectReviewIcon },
     { to: '/progress', label: 'Project Evolution', icon: EvolutionIcon },
@@ -69,14 +77,19 @@ export function AppLayout() {
       <header className="global-header" aria-label="Platform header">
         <div className="global-header-left">
           <NavLink className="header-brand" to="/dashboard">
-            <span className="brand-logo-gem">M</span>
-            <span className="brand-title">MISTIQ</span>
+            <span className="brand-logo-gem">A</span>
+            <span className="brand-title">ApexIQ</span>
             <span className="brand-badge">2.0</span>
           </NavLink>
           <div className="header-sub-tag">ENGINEERING INTELLIGENCE</div>
+
+          {/* MULTI-PROJECT WORKSPACE SWITCHER */}
+          <div className="header-project-switcher-wrap" style={{ marginLeft: '1rem' }}>
+            <ProjectSwitcher onOpenConnectWizard={() => setShowConnectWizard(true)} />
+          </div>
         </div>
 
-        {/* CENTER: PROJECT TELEMETRY (ONLY AFTER SUCCESSFUL CONNECTION) */}
+        {/* CENTER: PROJECT TELEMETRY */}
         <div className="global-header-center">
           {hasConnectedProject ? (
             <div className="header-project-info" title={`Repository: ${projectName}`}>
@@ -108,21 +121,22 @@ export function AppLayout() {
             </div>
           ) : (
             <div className="header-no-project">
-              <NavLink to="/project-review" className="header-connect-prompt">
+              <button
+                type="button"
+                onClick={() => setShowConnectWizard(true)}
+                className="header-connect-prompt"
+                style={{ background: 'none', border: 'none', cursor: 'pointer' }}
+              >
                 <ZapIcon size={12} className="inline mr-1 text-primary" />
                 <span>Connect repository to begin engineering analysis</span>
-              </NavLink>
+              </button>
             </div>
           )}
         </div>
 
         {/* RIGHT: NOTIFICATIONS, THEME, USER PROFILE */}
         <div className="global-header-right">
-          <NotificationCenter
-            isOpen={notifOpen}
-            onToggle={() => setNotifOpen(v => !v)}
-            onClose={() => setNotifOpen(false)}
-          />
+          <GlobalNotificationDrawer />
 
           <div className="relative theme-picker-wrap">
             <button
@@ -172,8 +186,8 @@ export function AppLayout() {
             aria-label="Developer Profile"
             title="View Developer Profile"
           >
-            <span className="header-avatar">{student.name.slice(0, 1).toUpperCase()}</span>
-            <span className="header-username">{student.name}</span>
+            <span className="header-avatar">{userInitial}</span>
+            <span className="header-username">{displayName}</span>
           </NavLink>
         </div>
       </header>
@@ -201,7 +215,7 @@ export function AppLayout() {
           </div>
 
           <div className="sidebar-nav-section research-nav">
-            <span className="sidebar-label">EXPLORE</span>
+            <span className="sidebar-label">EXPLORE & TOOLS</span>
             <nav aria-label="Explore navigation" className="sidebar-nav">
               <NavLink
                 to="/project-review/research-lab"
@@ -212,25 +226,20 @@ export function AppLayout() {
                 </span>
                 <span className="nav-label">Research Lab</span>
               </NavLink>
+              <NavLink
+                to="/settings"
+                className={({ isActive }) => (isActive ? 'nav-link active' : 'nav-link')}
+              >
+                <span className="nav-icon" aria-hidden="true">
+                  <LaptopIcon size={16} />
+                </span>
+                <span className="nav-label">Settings</span>
+              </NavLink>
             </nav>
           </div>
 
           <div className="sidebar-footer">
-            {/* DEDICATED NOTIFICATIONS BUTTON IN SIDEBAR */}
-            <button
-              type="button"
-              className={`sidebar-nav-item sidebar-notif-btn ${notifOpen ? 'active' : ''}`}
-              onClick={() => setNotifOpen(v => !v)}
-              aria-label="Open notifications"
-            >
-              <span className="nav-icon">
-                <BellIcon size={16} />
-              </span>
-              <span className="nav-label">Notifications</span>
-              {notifCount > 0 && <span className="sidebar-badge">{notifCount}</span>}
-            </button>
-
-            {/* DEDICATED THEME APPEARANCE PICKER IN SIDEBAR */}
+            {/* THEME APPEARANCE PICKER IN SIDEBAR */}
             <div className="sidebar-theme-item">
               <button
                 type="button"
@@ -281,25 +290,25 @@ export function AppLayout() {
               )}
             </div>
 
-            {/* DEVELOPER PROFILE LINK */}
+            {/* USER CARD WITH SIGN OUT */}
             <div className="sidebar-user-card">
               <NavLink
                 className="sidebar-person-link"
                 to="/profile"
                 aria-label="Developer Profile"
-                title="Open Developer Profile"
+                title="Open Profile"
               >
-                <span className="avatar">{student.name.slice(0, 1).toUpperCase()}</span>
+                <span className="avatar">{userInitial}</span>
                 <div className="sidebar-person">
-                  <strong>{student.name}</strong>
-                  <span>Lead Engineer</span>
+                  <strong>{displayName}</strong>
+                  <span>{user?.role === 'admin' ? 'System Administrator' : 'Staff Engineer'}</span>
                 </div>
               </NavLink>
               <button
                 type="button"
                 className="sidebar-signout-btn"
-                onClick={leave}
-                title="Sign out of developer profile"
+                onClick={handleSignOut}
+                title="Sign out"
                 aria-label="Sign out"
               >
                 <UserIcon size={13} />
@@ -321,7 +330,7 @@ export function AppLayout() {
 
       {/* MOBILE BOTTOM NAVIGATION */}
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {workspaceLinks.map(({ to, label, icon: Icon }) => (
+        {mobileLinks.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -334,6 +343,12 @@ export function AppLayout() {
           </NavLink>
         ))}
       </nav>
+
+      {/* CONNECTION WIZARD MODAL */}
+      <ConnectionWizardModal
+        isOpen={showConnectWizard}
+        onClose={() => setShowConnectWizard(false)}
+      />
     </div>
   )
 }

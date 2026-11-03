@@ -20,6 +20,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 def init_db() -> None:
+    settings.validate_production_security()
     Base.metadata.create_all(bind=engine)
     if settings.database_url.startswith("sqlite"):
         migrate_sqlite_schema(engine)
@@ -43,8 +44,35 @@ def migrate_sqlite_schema(database_engine) -> None:
                     connection.execute(text(f'ALTER TABLE "{table}" RENAME COLUMN "{old}" TO "{new}"'))
                     present.remove(old); present.add(new)
         additive = {
-            "project_findings": {"detected_at": "DATETIME", "updated_at": "DATETIME", "resolved_at": "DATETIME", "resolution_evidence": "TEXT", "related_commit": "VARCHAR(80)"},
-            "reviewed_projects": {"source_type": "VARCHAR(20) NOT NULL DEFAULT 'local'", "repository_url": "VARCHAR(1000)", "branch": "VARCHAR(200)", "current_commit_sha": "VARCHAR(80)", "monitoring_status": "VARCHAR(30) NOT NULL DEFAULT 'paused'", "last_analyzed_at": "DATETIME"},
+            "users": {
+                "must_change_password": "BOOLEAN NOT NULL DEFAULT 0",
+            },
+            "project_findings": {
+                "title": "VARCHAR(300)",
+                "detected_at": "DATETIME",
+                "updated_at": "DATETIME",
+                "resolved_at": "DATETIME",
+                "resolution_evidence": "TEXT",
+                "related_commit": "VARCHAR(80)",
+                "suppressed": "BOOLEAN NOT NULL DEFAULT 0",
+                "suppression_reason": "TEXT",
+                "suppression_type": "VARCHAR(50)",
+                "suppressed_at": "DATETIME",
+                "suppressed_by": "INTEGER",
+            },
+            "reviewed_projects": {
+                "source_type": "VARCHAR(20) NOT NULL DEFAULT 'local'",
+                "repository_url": "VARCHAR(1000)",
+                "branch": "VARCHAR(200)",
+                "current_commit_sha": "VARCHAR(80)",
+                "monitoring_status": "VARCHAR(30) NOT NULL DEFAULT 'paused'",
+                "last_analyzed_at": "DATETIME",
+                "owner_id": "INTEGER REFERENCES users(id)",
+                "description": "TEXT",
+                "is_archived": "BOOLEAN NOT NULL DEFAULT 0",
+                "analysis_coverage": "JSON",
+                "settings": "JSON",
+            },
             "questions": {"error_mapping": "JSON NOT NULL DEFAULT '{}'"},
             "attempts": {"idempotency_key": "VARCHAR(100)"},
             "learner_states": {
@@ -74,6 +102,32 @@ def migrate_sqlite_schema(database_engine) -> None:
             for column, ddl in columns.items():
                 if column not in present:
                     connection.execute(text(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {ddl}'))
-        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_attempt_idempotency_key ON attempts(idempotency_key)"))
-        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_mistake_attempt ON mistake_events(attempt_id)"))
-        connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_prediction_source_attempt ON predictions(source_attempt_id)"))
+        existing_tables = set(inspect(connection).get_table_names())
+        if "attempts" in existing_tables:
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_attempt_idempotency_key ON attempts(idempotency_key)"))
+        if "mistake_events" in existing_tables:
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_mistake_attempt ON mistake_events(attempt_id)"))
+        if "predictions" in existing_tables:
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_prediction_source_attempt ON predictions(source_attempt_id)"))
+        if "reviewed_projects" in existing_tables:
+            connection.execute(text("CREATE INDEX IF NOT EXISTS idx_reviewed_projects_owner_id ON reviewed_projects(owner_id)"))
+        if "project_findings" in existing_tables:
+            connection.execute(text("CREATE INDEX IF NOT EXISTS idx_project_findings_suppressed ON project_findings(suppressed)"))
+        if "notifications" in existing_tables:
+            connection.execute(text("CREATE INDEX IF NOT EXISTS idx_notifications_user_seen ON notifications(user_id, seen)"))
+
+    # Data preservation: Ensure default admin exists and claim any unowned legacy projects
+    with database_engine.begin() as conn:
+        tables_now = set(inspect(conn).get_table_names())
+    if "reviewed_projects" in tables_now and "users" in tables_now:
+        from app.services.auth_service import get_or_create_default_admin
+        session_factory = sessionmaker(bind=database_engine, autoflush=False, autocommit=False)
+        with session_factory() as session:
+            admin = get_or_create_default_admin(session)
+            unowned = session.execute(text("SELECT id FROM reviewed_projects WHERE owner_id IS NULL")).fetchall()
+            if unowned:
+                session.execute(
+                    text("UPDATE reviewed_projects SET owner_id = :owner_id WHERE owner_id IS NULL"),
+                    {"owner_id": admin.id},
+                )
+                session.commit()

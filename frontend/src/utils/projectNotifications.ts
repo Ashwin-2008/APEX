@@ -57,9 +57,9 @@ export function recordProjectNotification(event: { type?: string; [key: string]:
     'finding.resolved': ['Finding resolved', 'A previously reported finding is no longer present.'],
     'analysis.completed': ['Analysis completed', 'The latest project changes were analyzed successfully.'],
     'analysis.failed': ['Monitoring error', String(event.message || 'The latest project analysis failed.')],
-    'prediction.updated': ['Prediction refreshed', 'MISTIQ-APR refreshed its next-failure estimate.'],
+    'prediction.updated': ['Prediction refreshed', 'Apex-APR refreshed its next-failure estimate.'],
     'dna.updated': ['Engineering profile changed', 'Failure DNA was updated from the latest evidence.'],
-    'project.changed': ['Project changed', 'MISTIQ detected a new project or Git change.'],
+    'project.changed': ['Project changed', 'ApexIQ detected a new project or Git change.'],
   }
   const message = messages[type]
   if (!message) return

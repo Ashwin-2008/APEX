@@ -53,6 +53,45 @@ class Settings:
     groq_model: str = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
     llm_enabled: bool = os.getenv("LLM_ENABLED", "false").lower() in {"1", "true", "yes"}
     monitor_debounce_seconds: float = max(2.0, min(5.0, float(os.getenv("MONITOR_DEBOUNCE_SECONDS", "3"))))
+    secret_key: str = os.getenv("SECRET_KEY", "apex_secret_key_change_in_production_2026")
+    token_expire_seconds: int = int(os.getenv("TOKEN_EXPIRE_SECONDS", str(86400 * 7)))
+    environment: str = os.getenv("ENVIRONMENT", os.getenv("APEX_ENV", "development")).strip().lower()
+    initial_admin_username: str = os.getenv("APEX_INITIAL_ADMIN_USERNAME", "apex_admin").strip()
+    initial_admin_password: str = os.getenv("APEX_INITIAL_ADMIN_PASSWORD", "").strip()
+    initial_admin_email: str = os.getenv("APEX_INITIAL_ADMIN_EMAIL", "admin@apex.local").strip()
+    sandbox_mode: str = os.getenv("APEX_SANDBOX_MODE", "docker" if os.getenv("ENVIRONMENT", "").lower() == "production" else "local_dev").strip().lower()
+    sandbox_image: str = os.getenv("APEX_SANDBOX_IMAGE", "python:3.11-slim").strip()
+    rate_limit_login_per_minute: int = max(1, int(os.getenv("APEX_RATE_LIMIT_LOGIN_PER_MINUTE", "10" if os.getenv("ENVIRONMENT", "").lower() == "production" else "60")))
+    rate_limit_register_per_minute: int = max(1, int(os.getenv("APEX_RATE_LIMIT_REGISTER_PER_MINUTE", "5" if os.getenv("ENVIRONMENT", "").lower() == "production" else "60")))
+    rate_limit_ip_per_minute: int = max(5, int(os.getenv("APEX_RATE_LIMIT_IP_PER_MINUTE", "30" if os.getenv("ENVIRONMENT", "").lower() == "production" else "120")))
+
+    def validate_production_security(self) -> None:
+        """Validate critical production security invariants at startup."""
+        if self.environment == "production":
+            insecure_secrets = {
+                "apex_secret_key_change_in_production_2026",
+                "secret",
+                "change-me",
+                "changeme",
+                "default",
+            }
+            if not self.secret_key or self.secret_key in insecure_secrets or len(self.secret_key) < 32:
+                raise RuntimeError(
+                    "PRODUCTION SECURITY VIOLATION: SECRET_KEY must be set to a cryptographically strong string of at least 32 characters in production."
+                )
+            if not self.initial_admin_password:
+                raise RuntimeError(
+                    "PRODUCTION SECURITY VIOLATION: APEX_INITIAL_ADMIN_PASSWORD must be explicitly provided in production mode."
+                )
+            insecure_passwords = {"ApexPassword123!", "password", "admin", "12345678", "admin123"}
+            if self.initial_admin_password in insecure_passwords or len(self.initial_admin_password) < 12:
+                raise RuntimeError(
+                    "PRODUCTION SECURITY VIOLATION: APEX_INITIAL_ADMIN_PASSWORD cannot be set to a default or weak password (min length 12 required in production)."
+                )
+            if self.sandbox_mode != "docker":
+                raise RuntimeError(
+                    "PRODUCTION SECURITY VIOLATION: APEX_SANDBOX_MODE must be set to 'docker' in production. Host execution is strictly forbidden."
+                )
 
 
 settings = Settings()

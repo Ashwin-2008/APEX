@@ -1,0 +1,37 @@
+{
+  "dataset_version": "v001",
+  "exclusions": [
+    {
+      "reason": "Insufficient commit history (1 commits < minimum 2).",
+      "repository_name": "AISKills",
+      "repository_path": "C:\\Users\\ASHWIN\\Downloads\\PROJECTS\\AISKills",
+      "stage": "activity_history_check"
+    },
+    {
+      "reason": "Insufficient commit history (1 commits < minimum 2).",
+      "repository_name": "CI-CD",
+      "repository_path": "C:\\Users\\ASHWIN\\Downloads\\PROJECTS\\CI-CD",
+      "stage": "activity_history_check"
+    },
+    {
+      "reason": "Insufficient commit history (0 commits < minimum 2).",
+      "repository_name": "CodeNova",
+      "repository_path": "C:\\Users\\ASHWIN\\Downloads\\PROJECTS\\CodeNova",
+      "stage": "activity_history_check"
+    },
+    {
+      "reason": "Insufficient commit history (1 commits < minimum 2).",
+      "repository_name": "Entrprise",
+      "repository_path": "C:\\Users\\ASHWIN\\Downloads\\PROJECTS\\Entrprise",
+      "stage": "activity_history_check"
+    },
+    {
+      "reason": "Insufficient commit history (1 commits < minimum 2).",
+      "repository_name": "Tetravate",
+      "repository_path": "C:\\Users\\ASHWIN\\Downloads\\PROJECTS\\Tetravate",
+      "stage": "activity_history_check"
+    }
+  ],
+  "generated_at": "2026-10-28T16:21:19.933086+00:00",
+  "total_excluded": 5
+}

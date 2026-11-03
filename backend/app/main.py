@@ -29,6 +29,7 @@ def create_app(database_engine=None, ampa_service=None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
+        settings.validate_production_security()
         Base.metadata.create_all(bind=selected_engine)
         if selected_engine.dialect.name == "sqlite":
             migrate_sqlite_schema(selected_engine)

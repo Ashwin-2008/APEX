@@ -597,7 +597,7 @@ export function PredictionDisplayCard({
   return (
     <div className="prediction-display-card card interactive-card">
       <div className="prediction-card-head">
-        <span className="card-kicker">MISTIQ-APR NEXT ISSUE FORECAST</span>
+        <span className="card-kicker">Apex-APR NEXT ISSUE FORECAST</span>
         <span className="badge badge-info">Confidence {Math.round(confidence * 100)}%</span>
       </div>
       <div className="prediction-main-row">
