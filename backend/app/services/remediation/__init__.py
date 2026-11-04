@@ -4,6 +4,7 @@ from app.services.remediation.behavioral_verifier import (
     BehavioralVerificationResult,
     BehavioralVerifier,
 )
+from app.services.remediation.crash_recovery import CrashRecoveryEngine
 from app.services.remediation.patch_confidence import (
     ConfidenceDimension,
     PatchConfidenceEngine,
@@ -32,11 +33,21 @@ from app.services.remediation.post_apply_verifier import (
     PostApplyVerificationResult,
     PostApplyVerifier,
 )
+from app.services.remediation.repository_lock import (
+    LockAcquisitionError,
+    RepositoryLockContext,
+    RepositoryLockManager,
+)
 from app.services.remediation.semantic_verifier import (
     FunctionContract,
     SemanticRisk,
     SemanticVerificationResult,
     SemanticVerifier,
+)
+from app.services.remediation.transaction_engine import (
+    MultiFileTransactionEngine,
+    RollbackConflictError,
+    TransactionState,
 )
 
 __all__ = [
@@ -46,7 +57,10 @@ __all__ = [
     "BehavioralVerifier",
     "CodePatch",
     "ConfidenceDimension",
+    "CrashRecoveryEngine",
     "FunctionContract",
+    "LockAcquisitionError",
+    "MultiFileTransactionEngine",
     "PatchConfidenceEngine",
     "PatchConfidenceReport",
     "PatchGenerator",
@@ -62,9 +76,13 @@ __all__ = [
     "PostApplyOutcome",
     "PostApplyVerificationResult",
     "PostApplyVerifier",
+    "RepositoryLockContext",
+    "RepositoryLockManager",
+    "RollbackConflictError",
     "SemanticRisk",
     "SemanticVerificationResult",
     "SemanticVerifier",
+    "TransactionState",
     "compute_content_sha256",
     "global_patch_manager",
 ]

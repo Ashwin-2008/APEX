@@ -130,6 +130,65 @@ export interface PatchActionResponse {
   patch_record?: PatchRecord
 }
 
+// ==========================================
+// Phase 2D.2: Transaction & Recovery Types
+// ==========================================
+
+export interface PlannedFile {
+  rel_path: string
+  target_abs_path: string
+  pre_hash: string
+  post_hash: string
+  staged_path: string
+  backup_path: string
+  status: string
+  finding_id?: string
+}
+
+export interface RemediationTransaction {
+  transaction_id: string
+  project_id: number
+  user_id?: number
+  state: string
+  created_at: string
+  updated_at: string
+  files_count: number
+  files: PlannedFile[]
+  finding_ids: string[]
+  error_message?: string | null
+  post_verification?: {
+    status: string
+    verified: boolean
+    regressions: string[]
+    files_checked: string[]
+    verified_at: string
+  } | null
+}
+
+export interface JournalEntry {
+  timestamp: string
+  event: string
+  data: any
+}
+
+export interface LockStatus {
+  is_locked: boolean
+  project_id: number
+  transaction_id?: string | null
+  holder?: string | null
+  expires_at?: string | null
+  is_stale: boolean
+  pid?: number | null
+}
+
+export interface RecoverySummary {
+  project_id: number
+  stale_lock_cleared: boolean
+  recovered_transactions_count: number
+  recovered_transactions: any[]
+  manual_reconciliation_needed: any[]
+}
+
 export async function generateFix(
   projectId: number | string,
   findingId: string,
@@ -203,6 +262,85 @@ export async function postApplyVerify(
   patchId: string
 ): Promise<PostApplyVerificationResult> {
   return request(`/project-reviews/${projectId}/patches/${encodeURIComponent(patchId)}/post-apply-verify`, {
+    method: 'POST',
+  })
+}
+
+// Phase 2D.2 APIs
+
+export async function createTransaction(
+  projectId: number | string,
+  patches: Array<{ rel_path: string; patched_content: string; finding_id?: string }>,
+  autoApply: boolean = false
+): Promise<RemediationTransaction> {
+  return request<RemediationTransaction>(`/project-reviews/${projectId}/remediation/transactions`, {
+    method: 'POST',
+    body: JSON.stringify({ patches, auto_apply: autoApply }),
+  })
+}
+
+export async function listTransactions(
+  projectId: number | string
+): Promise<{ project_id: number; transactions: any[] }> {
+  return request(`/project-reviews/${projectId}/remediation/transactions`)
+}
+
+export async function getTransaction(
+  projectId: number | string,
+  transactionId: string
+): Promise<{ transaction_id: string; manifest: RemediationTransaction; journal: JournalEntry[] }> {
+  return request(`/project-reviews/${projectId}/remediation/transactions/${encodeURIComponent(transactionId)}`)
+}
+
+export async function applyTransaction(
+  projectId: number | string,
+  transactionId: string
+): Promise<RemediationTransaction> {
+  return request<RemediationTransaction>(`/project-reviews/${projectId}/remediation/transactions/${encodeURIComponent(transactionId)}/apply`, {
+    method: 'POST',
+  })
+}
+
+export async function rollbackTransaction(
+  projectId: number | string,
+  transactionId: string,
+  force: boolean = false
+): Promise<RemediationTransaction> {
+  return request<RemediationTransaction>(`/project-reviews/${projectId}/remediation/transactions/${encodeURIComponent(transactionId)}/rollback`, {
+    method: 'POST',
+    body: JSON.stringify({ force }),
+  })
+}
+
+export async function recoverTransaction(
+  projectId: number | string,
+  transactionId: string
+): Promise<any> {
+  return request(`/project-reviews/${projectId}/remediation/transactions/${encodeURIComponent(transactionId)}/recover`, {
+    method: 'POST',
+  })
+}
+
+export async function inspectLock(
+  projectId: number | string
+): Promise<LockStatus> {
+  return request<LockStatus>(`/project-reviews/${projectId}/remediation/locks`)
+}
+
+export async function breakStaleLock(
+  projectId: number | string,
+  force: boolean = false
+): Promise<{ project_id: number; broken: boolean; message: string }> {
+  return request(`/project-reviews/${projectId}/remediation/locks/break-stale`, {
+    method: 'POST',
+    body: JSON.stringify({ force }),
+  })
+}
+
+export async function scanRecovery(
+  projectId: number | string
+): Promise<RecoverySummary> {
+  return request<RecoverySummary>(`/project-reviews/${projectId}/remediation/scan-recovery`, {
     method: 'POST',
   })
 }

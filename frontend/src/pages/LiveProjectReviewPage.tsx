@@ -8,6 +8,7 @@ import { monitoringView, ProjectHeader } from '../components/projectReview/Proje
 import { buildHealthCards, HealthCards } from '../components/projectReview/ProjectHealth'
 import { ActivityFeed } from '../components/projectReview/ActivityFeed'
 import { ProblemsSection } from '../components/projectReview/ProblemsSection'
+import { KnowledgeGraphSection } from '../components/projectReview/KnowledgeGraphSection'
 import { RecentlyFixed, resolvedFromHistory, type ResolvedView } from '../components/projectReview/RecentlyFixed'
 import { RequirementsSection } from '../components/projectReview/RequirementsSection'
 import { RecommendationsSection } from '../components/projectReview/RecommendationsSection'

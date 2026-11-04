@@ -14,6 +14,9 @@ def test_database_initialization() -> None:
         "reviewed_projects", "project_reviews", "project_findings", "project_predictions",
         "project_requirements", "requirement_coverage",
         "users", "notifications", "activity_events",
+        "remediation_transactions", "remediation_locks",
+        "engineering_graph_versions", "engineering_graph_nodes", "engineering_graph_edges",
+        "engineering_identity_transitions", "engineering_graph_update_journals",
     }
 
 

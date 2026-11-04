@@ -16,11 +16,16 @@ import {
   applyPatch,
   rollbackPatch,
   verifyBehavioral,
+  inspectLock,
+  breakStaleLock,
+  scanRecovery,
   type CodePatch,
   type PatchVerificationResult,
   type SemanticVerificationResult,
   type BehavioralVerificationResult,
   type PatchRecord,
+  type LockStatus,
+  type RecoverySummary,
 } from '../../api/remediationApi'
 
 function formatWhen(value: string | null | undefined): string | null {
@@ -495,6 +500,46 @@ export function ProblemsSection({
   onSuppress?: (finding: DedupableFinding) => void
 }) {
   const [filter, setFilter] = useState<string>('all')
+  const [showTxnModal, setShowTxnModal] = useState(false)
+  const [lockStatus, setLockStatus] = useState<LockStatus | null>(null)
+  const [lockLoading, setLockLoading] = useState(false)
+  const [recoveryScanning, setRecoveryScanning] = useState(false)
+  const [recoverySummary, setRecoverySummary] = useState<RecoverySummary | null>(null)
+
+  const handleCheckLock = async () => {
+    setLockLoading(true)
+    try {
+      const res = await inspectLock(projectId || 1)
+      setLockStatus(res)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLockLoading(false)
+    }
+  }
+
+  const handleBreakLock = async (force: boolean = false) => {
+    try {
+      await breakStaleLock(projectId || 1, force)
+      handleCheckLock()
+    } catch (e: any) {
+      alert(e?.message || 'Failed to break lock')
+    }
+  }
+
+  const handleScanRecovery = async () => {
+    setRecoveryScanning(true)
+    try {
+      const res = await scanRecovery(projectId || 1)
+      setRecoverySummary(res)
+      handleCheckLock()
+    } catch (e: any) {
+      alert(e?.message || 'Crash recovery scan failed')
+    } finally {
+      setRecoveryScanning(false)
+    }
+  }
+
 
   const filterTabs = [
     { id: 'all', label: 'All' },
@@ -519,7 +564,7 @@ export function ProblemsSection({
 
   return (
     <section className="card pr-section" aria-label="Problems to fix">
-      <div className="pr-section-header-row">
+      <div className="pr-section-header-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <h2>PROBLEMS TO FIX</h2>
           <p className="pr-section-note">
@@ -528,7 +573,87 @@ export function ProblemsSection({
               : `${findings.length} issue${findings.length === 1 ? '' : 's'} requiring engineer attention.`}
           </p>
         </div>
+        <div>
+          <button
+            type="button"
+            onClick={() => {
+              setShowTxnModal(!showTxnModal)
+              if (!showTxnModal) handleCheckLock()
+            }}
+            className="button button-sm button-secondary"
+            title="Inspect repository concurrency lock and crash recovery status"
+          >
+            Transaction & Recovery Center
+          </button>
+        </div>
       </div>
+
+      {showTxnModal && (
+        <div style={{ padding: '1rem', marginBottom: '1rem', background: '#0f172a', border: '1px solid #334155', borderRadius: '0.5rem', color: '#e2e8f0', fontSize: '0.875rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <h3 style={{ margin: 0, fontWeight: 'bold', color: '#f8fafc' }}>Transactional Remediation Integrity & Concurrency Center</h3>
+            <button
+              type="button"
+              onClick={() => setShowTxnModal(false)}
+              style={{ background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: '1rem' }}
+            >
+              Close
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+            <div style={{ padding: '0.75rem', background: '#020617', border: '1px solid #1e293b', borderRadius: '0.375rem' }}>
+              <div style={{ fontWeight: 600, color: '#cbd5e1', marginBottom: '0.25rem' }}>Repository Concurrency Lease Lock:</div>
+              {lockLoading ? (
+                <div style={{ color: '#94a3b8' }}>Inspecting lock...</div>
+              ) : lockStatus ? (
+                <div>
+                  <div>Status: <strong style={{ color: lockStatus.is_locked ? '#fbbf24' : '#34d399' }}>{lockStatus.is_locked ? 'LOCKED' : 'UNLOCKED'}</strong></div>
+                  {lockStatus.transaction_id && <div>Active Txn: <code style={{ fontSize: '0.75rem', background: '#0f172a', padding: '0.125rem 0.25rem' }}>{lockStatus.transaction_id}</code></div>}
+                  {lockStatus.holder && <div>Holder: {lockStatus.holder}</div>}
+                  {lockStatus.expires_at && <div>Expires: {new Date(lockStatus.expires_at).toLocaleTimeString()}</div>}
+                  {lockStatus.is_stale && <div style={{ color: '#f87171', fontWeight: 600 }}>Stale lock detected (process dead or lease expired).</div>}
+                  <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem' }}>
+                    <button type="button" onClick={handleCheckLock} className="button button-xs button-secondary">Refresh</button>
+                    {(lockStatus.is_locked || lockStatus.is_stale) && (
+                      <button type="button" onClick={() => handleBreakLock(true)} className="button button-xs button-danger">Break Stale Lock</button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div style={{ color: '#94a3b8' }}>Lock not checked. <button type="button" onClick={handleCheckLock} style={{ color: '#818cf8', textDecoration: 'underline', background: 'transparent', border: 'none', cursor: 'pointer' }}>Check now</button></div>
+              )}
+            </div>
+
+            <div style={{ padding: '0.75rem', background: '#020617', border: '1px solid #1e293b', borderRadius: '0.375rem' }}>
+              <div style={{ fontWeight: 600, color: '#cbd5e1', marginBottom: '0.25rem' }}>Crash Recovery Audit:</div>
+              <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '0 0 0.5rem 0' }}>
+                Scans repository for interrupted file swaps, dangling locks, and orphan manifests. Reconciles to clean state or flags external edits.
+              </p>
+              <button
+                type="button"
+                onClick={handleScanRecovery}
+                disabled={recoveryScanning}
+                className="button button-xs button-primary"
+                style={{ marginBottom: '0.5rem' }}
+              >
+                {recoveryScanning ? 'Scanning...' : 'Run Crash Recovery Scan'}
+              </button>
+              {recoverySummary && (
+                <div style={{ fontSize: '0.75rem', color: '#cbd5e1' }}>
+                  <div>Recovered Incomplete: <strong>{recoverySummary.recovered_transactions_count}</strong></div>
+                  <div>Stale Locks Cleared: <strong>{recoverySummary.stale_lock_cleared ? 'Yes' : 'No'}</strong></div>
+                  {recoverySummary.manual_reconciliation_needed.length > 0 && (
+                    <div style={{ color: '#f87171', fontWeight: 600, marginTop: '0.25rem' }}>
+                      {recoverySummary.manual_reconciliation_needed.length} transaction(s) require manual reconciliation (external modifications detected).
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {findings.length > 0 && (
         <div className="filter-chips" role="tablist" aria-label="Filter issues by severity or category">

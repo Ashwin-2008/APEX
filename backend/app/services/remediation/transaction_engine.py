@@ -185,13 +185,12 @@ class MultiFileTransactionEngine:
 
             # Check semantic validity of patched content if python file
             if rel_path.endswith(".py"):
-                sem_res = SemanticVerifier.verify(
+                sem_res = SemanticVerifier.verify_semantics(
                     original_code=current_content,
                     patched_code=patched_content,
-                    file_path=rel_path,
                 )
-                if not sem_res.is_safe:
-                    raise ValueError(f"Semantic verification failed for '{rel_path}': {sem_res.reason}")
+                if not sem_res.valid:
+                    raise ValueError(f"Semantic verification failed for '{rel_path}': {sem_res.summary}")
 
             # Backup original file to backup dir
             safe_rel = rel_path.replace("/", "_").replace("\\", "_")

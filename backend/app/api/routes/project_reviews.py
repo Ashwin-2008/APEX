@@ -1140,3 +1140,660 @@ def check_patches_stale_report(project_id: int, request: Request):
                 })
         return {"project_id": project_id, "checks": results}
 
+
+
+class CreateTransactionRequest(BaseModel):
+    patches: list[dict[str, Any]]
+    auto_apply: bool = False
+
+
+class RollbackTransactionRequest(BaseModel):
+    force: bool = False
+
+
+class BreakLockRequest(BaseModel):
+    force: bool = False
+
+
+@router.post("/{project_id}/remediation/transactions", summary="Prepare or atomically apply multi-file remediation transaction")
+def create_remediation_transaction(project_id: int, body: CreateTransactionRequest, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        user = getattr(request.state, "user", None)
+        user_id = user.id if user else None
+
+        from app.services.remediation import (
+            MultiFileTransactionEngine,
+            LockAcquisitionError,
+        )
+
+        try:
+            manifest = MultiFileTransactionEngine.prepare_transaction(
+                project_id=project_id,
+                repo_root=repo_path,
+                file_patches=body.patches,
+                user_id=user_id,
+                db=session,
+            )
+            if body.auto_apply:
+                manifest = MultiFileTransactionEngine.apply_transaction(
+                    project_id=project_id,
+                    repo_root=repo_path,
+                    transaction_id=manifest["transaction_id"],
+                    acquired_by=user.username if user else "apex_user",
+                    db=session,
+                )
+            return manifest
+        except LockAcquisitionError as lae:
+            raise HTTPException(status_code=409, detail=lae.to_dict())
+        except (ValueError, FileNotFoundError) as ve:
+            raise HTTPException(status_code=400, detail=str(ve))
+        except RuntimeError as re:
+            raise HTTPException(status_code=500, detail=str(re))
+
+
+@router.get("/{project_id}/remediation/transactions", summary="List remediation transactions for project")
+def list_remediation_transactions(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+
+        from app.models.entities import RemediationTransaction
+        from app.services.remediation import MultiFileTransactionEngine
+
+        # DB records
+        db_records = session.query(RemediationTransaction).filter(
+            RemediationTransaction.project_id == project_id
+        ).order_by(RemediationTransaction.created_at.desc()).all()
+
+        results = []
+        seen_ids = set()
+        for r in db_records:
+            seen_ids.add(r.transaction_id)
+            results.append({
+                "transaction_id": r.transaction_id,
+                "project_id": r.project_id,
+                "state": r.state,
+                "files_count": r.files_count,
+                "manifest": r.manifest,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            })
+
+        # Also discover disk transactions
+        txns_dir = repo_path / ".apex_backup" / "transactions"
+        if txns_dir.is_dir():
+            for child in txns_dir.iterdir():
+                if child.is_dir() and child.name not in seen_ids:
+                    manifest = MultiFileTransactionEngine.load_manifest(repo_path, child.name)
+                    if manifest and manifest.get("project_id") == project_id:
+                        results.append({
+                            "transaction_id": child.name,
+                            "project_id": project_id,
+                            "state": manifest.get("state"),
+                            "files_count": manifest.get("files_count", 0),
+                            "manifest": manifest,
+                            "created_at": manifest.get("created_at"),
+                            "updated_at": manifest.get("updated_at"),
+                        })
+
+        return {"project_id": project_id, "transactions": results}
+
+
+@router.get("/{project_id}/remediation/transactions/{transaction_id}", summary="Get transaction details and journal")
+def get_remediation_transaction(project_id: int, transaction_id: str, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+
+        from app.services.remediation import MultiFileTransactionEngine
+
+        manifest = MultiFileTransactionEngine.load_manifest(repo_path, transaction_id)
+        if not manifest or manifest.get("project_id") != project_id:
+            raise HTTPException(status_code=404, detail="Transaction not found for this project.")
+
+        journal = MultiFileTransactionEngine.get_journal(repo_path, transaction_id)
+        return {
+            "transaction_id": transaction_id,
+            "manifest": manifest,
+            "journal": journal,
+        }
+
+
+@router.post("/{project_id}/remediation/transactions/{transaction_id}/apply", summary="Apply prepared multi-file transaction")
+def apply_remediation_transaction(project_id: int, transaction_id: str, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        user = getattr(request.state, "user", None)
+        from app.services.remediation import (
+            MultiFileTransactionEngine,
+            LockAcquisitionError,
+        )
+
+        try:
+            manifest = MultiFileTransactionEngine.apply_transaction(
+                project_id=project_id,
+                repo_root=repo_path,
+                transaction_id=transaction_id,
+                acquired_by=user.username if user else "apex_user",
+                db=session,
+            )
+            return manifest
+        except LockAcquisitionError as lae:
+            raise HTTPException(status_code=409, detail=lae.to_dict())
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=str(ve))
+        except RuntimeError as re:
+            raise HTTPException(status_code=500, detail=str(re))
+
+
+@router.post("/{project_id}/remediation/transactions/{transaction_id}/rollback", summary="Roll back multi-file transaction with conflict check")
+def rollback_remediation_transaction(project_id: int, transaction_id: str, body: RollbackTransactionRequest, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        user = getattr(request.state, "user", None)
+        from app.services.remediation import (
+            MultiFileTransactionEngine,
+            RollbackConflictError,
+            LockAcquisitionError,
+        )
+
+        try:
+            manifest = MultiFileTransactionEngine.rollback_transaction(
+                project_id=project_id,
+                repo_root=repo_path,
+                transaction_id=transaction_id,
+                force=body.force,
+                acquired_by=user.username if user else "apex_user",
+                db=session,
+            )
+            return manifest
+        except RollbackConflictError as rce:
+            raise HTTPException(status_code=409, detail=rce.to_dict())
+        except LockAcquisitionError as lae:
+            raise HTTPException(status_code=409, detail=lae.to_dict())
+        except ValueError as ve:
+            raise HTTPException(status_code=400, detail=str(ve))
+
+
+@router.post("/{project_id}/remediation/transactions/{transaction_id}/recover", summary="Trigger crash recovery on single transaction")
+def recover_remediation_transaction(project_id: int, transaction_id: str, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.services.remediation import CrashRecoveryEngine
+
+        res = CrashRecoveryEngine.recover_transaction(
+            project_id=project_id,
+            repo_root=repo_path,
+            transaction_id=transaction_id,
+            db=session,
+        )
+        return res
+
+
+@router.get("/{project_id}/remediation/locks", summary="Inspect repository lock status")
+def inspect_repository_lock(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+
+        from app.services.remediation import RepositoryLockManager
+
+        status = RepositoryLockManager.inspect_lock(project_id, repo_path, db=session)
+        return status
+
+
+@router.post("/{project_id}/remediation/locks/break-stale", summary="Break stale or abandoned repository lease lock")
+def break_stale_repository_lock(project_id: int, body: BreakLockRequest, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+
+        from app.services.remediation import RepositoryLockManager
+
+        success, msg = RepositoryLockManager.break_stale_lock(
+            project_id=project_id,
+            repo_path=repo_path,
+            db=session,
+            force=body.force,
+        )
+        if not success:
+            raise HTTPException(status_code=400, detail=msg)
+        return {"project_id": project_id, "broken": success, "message": msg}
+
+
+@router.post("/{project_id}/remediation/scan-recovery", summary="Scan and recover all incomplete transactions in project")
+def scan_and_recover_project_transactions(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.services.remediation import CrashRecoveryEngine
+
+        summary = CrashRecoveryEngine.scan_and_recover_project(
+            project_id=project_id,
+            repo_root=repo_path,
+            db=session,
+        )
+        return summary
+
+
+# ============================================================================
+# Phase 3: Project-Wide Engineering Knowledge Graph & Impact Intelligence
+# ============================================================================
+
+class ExtractGraphRequest(BaseModel):
+    force_full_rebuild: bool = False
+    changed_files: list[str] = []
+    deleted_files: list[str] = []
+
+
+class AnalyzeImpactRequest(BaseModel):
+    targets: list[str]
+    max_depth: int = 5
+
+
+class BlastRadiusRequest(BaseModel):
+    targets: list[str]
+    max_depth: int = 5
+
+
+class RecommendedTestsRequest(BaseModel):
+    targets: list[str]
+    max_depth: int = 4
+
+
+@router.post("/{project_id}/graph/extract", summary="Extract or incrementally update repository engineering knowledge graph")
+def extract_knowledge_graph(project_id: int, body: ExtractGraphRequest, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        repo_path = Path(project.repository_path)
+        if not repo_path.is_dir():
+            raise HTTPException(status_code=400, detail="Repository path does not exist.")
+
+        from app.models.entities import ProjectFinding, ProjectReview, RemediationTransaction
+        from app.services.graph import IncrementalGraphUpdater
+
+        # Fetch findings & transactions for enrichment
+        db_findings = session.query(ProjectFinding).join(ProjectReview, ProjectFinding.review_id == ProjectReview.id).filter(ProjectReview.project_id == project_id).all()
+        findings_payload = [
+            {
+                "id": f.id,
+                "rule_id": f.category or "FINDING",
+                "file_path": f.file,
+                "start_line": f.line,
+                "severity": f.severity,
+                "category": f.category,
+                "message": f.title,
+            }
+            for f in db_findings
+        ]
+
+        db_txns = session.query(RemediationTransaction).filter(RemediationTransaction.project_id == project_id).all()
+        txns_payload = [
+            {
+                "transaction_id": t.transaction_id,
+                "state": t.state,
+                "manifest": t.manifest,
+            }
+            for t in db_txns
+        ]
+
+        nodes, edges, version = IncrementalGraphUpdater.update_graph(
+            db=session,
+            project_id=project_id,
+            repo_root=repo_path,
+            changed_files=body.changed_files if not body.force_full_rebuild else None,
+            deleted_files=body.deleted_files if not body.force_full_rebuild else None,
+            commit_sha=project.current_commit_sha,
+            force_full_rebuild=body.force_full_rebuild,
+            findings=findings_payload,
+            transactions=txns_payload,
+        )
+
+        return {
+            "project_id": project_id,
+            "version_number": version.version_number if version else 1,
+            "status": version.status if version else "ACTIVE",
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+            "is_current": True,
+            "created_at": version.created_at.isoformat() if version and version.created_at else None,
+        }
+
+
+@router.get("/{project_id}/graph/overview", summary="Retrieve engineering knowledge graph overview and summary")
+def get_graph_overview(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.services.graph import GraphStorageManager
+
+        nodes, edges, version = GraphStorageManager.load_active_graph(session, project_id)
+        if not version or not nodes:
+            # Auto-extract if none exists yet
+            repo_path = Path(project.repository_path)
+            if repo_path.is_dir():
+                from app.services.graph import IncrementalGraphUpdater
+                nodes, edges, version = IncrementalGraphUpdater.update_graph(
+                    db=session,
+                    project_id=project_id,
+                    repo_root=repo_path,
+                    force_full_rebuild=True,
+                )
+
+        # Entity type counts
+        entity_counts = {}
+        for n in nodes.values():
+            entity_counts[n.entity_type] = entity_counts.get(n.entity_type, 0) + 1
+
+        rel_counts = {}
+        for e in edges:
+            rel_counts[e.rel_type] = rel_counts.get(e.rel_type, 0) + 1
+
+        consistency = GraphStorageManager.verify_consistency(nodes, edges)
+
+        return {
+            "project_id": project_id,
+            "version_number": version.version_number if version else 0,
+            "commit_sha": version.commit_sha if version else None,
+            "node_count": len(nodes),
+            "edge_count": len(edges),
+            "entity_type_counts": entity_counts,
+            "relationship_type_counts": rel_counts,
+            "consistency": consistency,
+            "created_at": version.created_at.isoformat() if version and version.created_at else None,
+        }
+
+
+@router.get("/{project_id}/graph/nodes", summary="Query graph nodes with pagination and filters")
+def query_graph_nodes(
+    project_id: int,
+    request: Request,
+    entity_type: str | None = None,
+    search: str | None = None,
+    file_path: str | None = None,
+    skip: int = 0,
+    limit: int = 50,
+):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.services.graph import GraphQueryEngine, GraphStorageManager
+
+        nodes, _, _ = GraphStorageManager.load_active_graph(session, project_id)
+        result = GraphQueryEngine.filter_nodes(
+            nodes=nodes,
+            entity_type=entity_type,
+            search=search,
+            file_path=file_path,
+            skip=skip,
+            limit=limit,
+        )
+        return result
+
+
+@router.get("/{project_id}/graph/edges", summary="Query graph edges with pagination and filters")
+def query_graph_edges(
+    project_id: int,
+    request: Request,
+    rel_type: str | None = None,
+    source_id: str | None = None,
+    target_id: str | None = None,
+    skip: int = 0,
+    limit: int = 50,
+):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.services.graph import GraphStorageManager
+
+        _, edges, _ = GraphStorageManager.load_active_graph(session, project_id)
+        filtered = []
+        for e in edges:
+            if rel_type and e.rel_type.upper() != rel_type.upper():
+                continue
+            if source_id and e.source_canonical_id != source_id:
+                continue
+            if target_id and e.target_canonical_id != target_id:
+                continue
+            filtered.append(e.to_dict())
+
+        return {
+            "total": len(filtered),
+            "skip": skip,
+            "limit": limit,
+            "edges": filtered[skip : skip + limit],
+        }
+
+
+@router.post("/{project_id}/graph/impact", summary="Analyze change impact for modified files or symbols")
+def analyze_change_impact(project_id: int, body: AnalyzeImpactRequest, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.services.graph import ChangeImpactEngine, GraphStorageManager
+
+        nodes, edges, _ = GraphStorageManager.load_active_graph(session, project_id)
+        report = ChangeImpactEngine.analyze_impact(
+            nodes=nodes,
+            edges=edges,
+            target_ids_or_files=body.targets,
+            max_depth=body.max_depth,
+        )
+        return report.to_dict()
+
+
+@router.post("/{project_id}/graph/blast-radius", summary="Compute engineering blast radius and risk score")
+def compute_blast_radius(project_id: int, body: BlastRadiusRequest, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.services.graph import BlastRadiusEngine, GraphStorageManager
+
+        nodes, edges, _ = GraphStorageManager.load_active_graph(session, project_id)
+        report = BlastRadiusEngine.calculate_blast_radius(
+            nodes=nodes,
+            edges=edges,
+            target_ids_or_files=body.targets,
+            max_depth=body.max_depth,
+        )
+        return report.to_dict()
+
+
+@router.post("/{project_id}/graph/recommended-tests", summary="Recommend ranked test suites based on change impact")
+def recommend_tests_for_changes(project_id: int, body: RecommendedTestsRequest, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.services.graph import GraphStorageManager, TestSelectionEngine
+
+        nodes, edges, _ = GraphStorageManager.load_active_graph(session, project_id)
+        tests = TestSelectionEngine.select_tests_for_changes(
+            nodes=nodes,
+            edges=edges,
+            target_ids_or_files=body.targets,
+            max_depth=body.max_depth,
+        )
+        return {"project_id": project_id, "targets": body.targets, "recommended_tests": [t.to_dict() for t in tests]}
+
+
+@router.get("/{project_id}/graph/architecture", summary="Analyze architectural health, fan-in/fan-out, and Tarjan circular dependencies")
+def get_architecture_metrics(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.services.graph import ArchitectureIntelligenceEngine, GraphStorageManager
+
+        nodes, edges, _ = GraphStorageManager.load_active_graph(session, project_id)
+        metrics = ArchitectureIntelligenceEngine.analyze_architecture(nodes, edges)
+        return metrics.to_dict()
+
+
+@router.get("/{project_id}/graph/subgraph", summary="Extract bounded neighborhood subgraph for visualization")
+def get_neighborhood_subgraph(
+    project_id: int,
+    center_id: str,
+    request: Request,
+    radius: int = 2,
+    limit: int = 80,
+):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.services.graph import GraphQueryEngine, GraphStorageManager
+
+        nodes, edges, _ = GraphStorageManager.load_active_graph(session, project_id)
+        subgraph = GraphQueryEngine.get_subgraph(
+            nodes=nodes,
+            edges=edges,
+            center_id=center_id,
+            radius=radius,
+            limit=limit,
+        )
+        return subgraph
+
+
+@router.get("/{project_id}/graph/shortest-path", summary="Find shortest dependency path between two components")
+def get_dependency_shortest_path(
+    project_id: int,
+    source_id: str,
+    target_id: str,
+    request: Request,
+    directed: bool = True,
+):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.services.graph import GraphQueryEngine, GraphStorageManager
+
+        nodes, edges, _ = GraphStorageManager.load_active_graph(session, project_id)
+        path_res = GraphQueryEngine.find_shortest_path(
+            nodes=nodes,
+            edges=edges,
+            source_id=source_id,
+            target_id=target_id,
+            directed=directed,
+        )
+        return path_res
+
+
+@router.get("/{project_id}/graph/coverage", summary="Get multi-language engineering graph coverage report")
+def get_graph_coverage(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.services.graph import GraphCoverageReporter, GraphStorageManager
+
+        nodes, edges, _ = GraphStorageManager.load_active_graph(session, project_id)
+        report = GraphCoverageReporter.generate_coverage_report(
+            project_id=project_id,
+            repo_root=project.repository_path,
+            nodes=nodes,
+            edges=edges,
+        )
+        return report.to_dict()
+
+
+@router.get("/{project_id}/graph/transitions", summary="List identity continuity transitions across graph versions")
+def get_identity_transitions(
+    project_id: int,
+    request: Request,
+    to_version_id: int | None = None,
+    limit: int = 100,
+):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.models.entities import EngineeringIdentityTransition
+
+        query = session.query(EngineeringIdentityTransition).filter(
+            EngineeringIdentityTransition.project_id == project_id
+        )
+        if to_version_id is not None:
+            query = query.filter(EngineeringIdentityTransition.to_version_id == to_version_id)
+        transitions = query.order_by(EngineeringIdentityTransition.id.desc()).limit(limit).all()
+
+        return [
+            {
+                "id": t.id,
+                "from_version_id": t.from_version_id,
+                "to_version_id": t.to_version_id,
+                "old_canonical_id": t.old_canonical_id,
+                "new_canonical_id": t.new_canonical_id,
+                "transition_type": t.transition_type,
+                "confidence": t.confidence,
+                "evidence": t.evidence,
+                "created_at": t.created_at.isoformat() if t.created_at else None,
+            }
+            for t in transitions
+        ]
+
+
+@router.get("/{project_id}/graph/versions", summary="List all historical graph version snapshots")
+def list_graph_versions(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.models.entities import EngineeringGraphVersion
+
+        versions = (
+            session.query(EngineeringGraphVersion)
+            .filter(EngineeringGraphVersion.project_id == project_id)
+            .order_by(EngineeringGraphVersion.version_number.desc())
+            .all()
+        )
+        return [
+            {
+                "id": v.id,
+                "version_number": v.version_number,
+                "status": v.status,
+                "is_current": v.is_current,
+                "commit_sha": v.commit_sha,
+                "node_count": v.node_count,
+                "edge_count": v.edge_count,
+                "metadata": v.metadata_json,
+                "created_at": v.created_at.isoformat() if v.created_at else None,
+            }
+            for v in versions
+        ]
+
+
+@router.get("/{project_id}/graph/compare", summary="Compare two knowledge graph versions")
+def compare_graph_versions(
+    project_id: int,
+    v1: int,
+    v2: int,
+    request: Request,
+):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.services.graph import GraphVersionComparator
+
+        try:
+            diff = GraphVersionComparator.compare_versions(
+                db=session,
+                project_id=project_id,
+                version_a_id_or_number=v1,
+                version_b_id_or_number=v2,
+            )
+            return diff.to_dict()
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/{project_id}/graph/recover", summary="Recover any interrupted staging graph updates")
+def recover_graph_updates(project_id: int, request: Request):
+    with request.app.state.SessionLocal() as session:
+        project = _check_project_access(session, project_id, request)
+        from app.services.graph import TransactionalGraphUpdater
+
+        recovered_count = TransactionalGraphUpdater.recover_interrupted_updates(session, project_id)
+        return {"project_id": project_id, "recovered_count": recovered_count, "status": "SUCCESS"}
+

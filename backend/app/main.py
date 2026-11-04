@@ -43,6 +43,12 @@ def create_app(database_engine=None, ampa_service=None) -> FastAPI:
             logger.exception("AMPA model initialization failed")
             service.available = False
             application.state.ampa_model_error = str(error)
+        # APEX 2.0 Crash recovery reconciliation on boot
+        try:
+            from app.services.remediation.crash_recovery import CrashRecoveryEngine
+            CrashRecoveryEngine.reconcile_on_startup(db_session_factory=session_factory)
+        except Exception as e:
+            logger.warning("Startup crash recovery scan failed: %s", e)
         application.state.ampa_service = service
         yield
         selected_engine.dispose() if database_engine is not None else None

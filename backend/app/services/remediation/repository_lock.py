@@ -337,3 +337,4 @@ class RepositoryLockContext:
                 transaction_id=self.transaction_id,
                 db=self.db,
             )
+

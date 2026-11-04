@@ -168,6 +168,7 @@ class ReviewedProject(Base):
     notifications: Mapped[list["Notification"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     activity_events: Mapped[list["ActivityEvent"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     remediation_transactions: Mapped[list["RemediationTransaction"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    graph_versions: Mapped[list["EngineeringGraphVersion"]] = relationship(back_populates="project", cascade="all, delete-orphan")
 
 
 class ProjectReview(Base):
@@ -309,3 +310,83 @@ class RemediationLockRecord(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
     project: Mapped[ReviewedProject] = relationship()
+
+
+class EngineeringGraphVersion(Base):
+    __tablename__ = "engineering_graph_versions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    commit_sha: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    is_current: Mapped[bool] = mapped_column(Boolean, default=True, index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="ACTIVE")
+    node_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    edge_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    project: Mapped[ReviewedProject] = relationship(back_populates="graph_versions")
+    nodes: Mapped[list["EngineeringGraphNode"]] = relationship(back_populates="version", cascade="all, delete-orphan")
+    edges: Mapped[list["EngineeringGraphEdge"]] = relationship(back_populates="version", cascade="all, delete-orphan")
+
+
+class EngineeringGraphNode(Base):
+    __tablename__ = "engineering_graph_nodes"
+    __table_args__ = (UniqueConstraint("version_id", "canonical_id", name="uq_graph_nodes_version_canonical"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    version_id: Mapped[int] = mapped_column(ForeignKey("engineering_graph_versions.id", ondelete="CASCADE"), index=True, nullable=False)
+    canonical_id: Mapped[str] = mapped_column(String(300), index=True, nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(60), index=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    qualified_name: Mapped[str] = mapped_column(String(300), nullable=False)
+    file_path: Mapped[str] = mapped_column(String(500), nullable=False, index=True)
+    start_line: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    end_line: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    node_metadata: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    version: Mapped[EngineeringGraphVersion] = relationship(back_populates="nodes")
+
+
+class EngineeringGraphEdge(Base):
+    __tablename__ = "engineering_graph_edges"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    version_id: Mapped[int] = mapped_column(ForeignKey("engineering_graph_versions.id", ondelete="CASCADE"), index=True, nullable=False)
+    source_canonical_id: Mapped[str] = mapped_column(String(300), index=True, nullable=False)
+    target_canonical_id: Mapped[str] = mapped_column(String(300), index=True, nullable=False)
+    rel_type: Mapped[str] = mapped_column(String(60), index=True, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    evidence_location: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    analyzer_source: Mapped[str] = mapped_column(String(80), nullable=False, default="ast")
+    provenance: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    version: Mapped[EngineeringGraphVersion] = relationship(back_populates="edges")
+
+
+class EngineeringIdentityTransition(Base):
+    __tablename__ = "engineering_identity_transitions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    from_version_id: Mapped[int | None] = mapped_column(ForeignKey("engineering_graph_versions.id", ondelete="CASCADE"), index=True, nullable=True)
+    to_version_id: Mapped[int] = mapped_column(ForeignKey("engineering_graph_versions.id", ondelete="CASCADE"), index=True, nullable=False)
+    old_canonical_id: Mapped[str] = mapped_column(String(300), index=True, nullable=False)
+    new_canonical_id: Mapped[str] = mapped_column(String(300), index=True, nullable=False)
+    transition_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    evidence: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    from_version: Mapped[EngineeringGraphVersion | None] = relationship(foreign_keys=[from_version_id])
+    to_version: Mapped[EngineeringGraphVersion] = relationship(foreign_keys=[to_version_id])
+
+
+class EngineeringGraphUpdateJournal(Base):
+    __tablename__ = "engineering_graph_update_journals"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    version_id: Mapped[int] = mapped_column(ForeignKey("engineering_graph_versions.id", ondelete="CASCADE"), index=True, nullable=False)
+    stage: Mapped[str] = mapped_column(String(50), nullable=False)
+    manifest: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    version: Mapped[EngineeringGraphVersion] = relationship()
+
