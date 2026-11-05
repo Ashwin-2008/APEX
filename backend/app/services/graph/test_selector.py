@@ -228,3 +228,30 @@ class TestSelectionBenchmark:
         metrics["total_recommended"] = total_rec
         metrics["total_relevant"] = total_rel
         return metrics
+
+
+def _normalize_nodes(nodes: dict[str, GraphNode] | list[GraphNode]) -> dict[str, GraphNode]:
+    if isinstance(nodes, list):
+        return {n.id: n for n in nodes}
+    return nodes
+
+
+def recommend_tests(
+    nodes: dict[str, GraphNode] | list[GraphNode],
+    edges: list[GraphEdge],
+    targets: list[str],
+    max_depth: int = 4,
+    runtime_traces: list[dict[str, Any]] | None = None,
+) -> list[RecommendedTest]:
+    return TestSelectionEngine.select_tests_for_changes(
+        nodes=_normalize_nodes(nodes),
+        edges=edges,
+        target_ids_or_files=targets,
+        max_depth=max_depth,
+        runtime_traces=runtime_traces,
+    )
+
+
+TestSelectionEngine.recommend_tests = staticmethod(recommend_tests)
+TargetedTestSelector = TestSelectionEngine
+

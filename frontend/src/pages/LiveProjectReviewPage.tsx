@@ -9,6 +9,8 @@ import { buildHealthCards, HealthCards } from '../components/projectReview/Proje
 import { ActivityFeed } from '../components/projectReview/ActivityFeed'
 import { ProblemsSection } from '../components/projectReview/ProblemsSection'
 import { KnowledgeGraphSection } from '../components/projectReview/KnowledgeGraphSection'
+import { PredictiveIntelligenceSection } from '../components/projectReview/PredictiveIntelligenceSection'
+import { RemediationPlanningSection } from '../components/projectReview/RemediationPlanningSection'
 import { RecentlyFixed, resolvedFromHistory, type ResolvedView } from '../components/projectReview/RecentlyFixed'
 import { RequirementsSection } from '../components/projectReview/RequirementsSection'
 import { RecommendationsSection } from '../components/projectReview/RecommendationsSection'
@@ -96,7 +98,7 @@ export function LiveProjectReviewPage() {
   const [stopping, setStopping] = useState(false)
   const [stopError, setStopError] = useState('')
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
-  const [activeTab, setActiveTab] = useState<'overview' | 'changes' | 'problems' | 'fixed' | 'requirements' | 'next' | 'intelligence'>('overview')
+  const [activeTab, setActiveTab] = useState<'overview' | 'changes' | 'problems' | 'fixed' | 'requirements' | 'next' | 'intelligence' | 'predictive' | 'graph' | 'remediation'>('overview')
 
   function handleEvent(event: ProjectEvent) {
     recordProjectNotification(event)
@@ -377,6 +379,7 @@ export function LiveProjectReviewPage() {
     ['requirements', 'Requirements'],
     ['next', 'Next steps'],
     ['intelligence', 'Failure intelligence'],
+    ['remediation', 'Remediation & Planning'],
   ] as const
 
   return (
@@ -450,14 +453,18 @@ export function LiveProjectReviewPage() {
         {activeTab === 'fixed' && <RecentlyFixed items={resolvedViews} />}
         {activeTab === 'requirements' && <RequirementsSection projectId={projectId} refreshToken={refreshToken} />}
         {activeTab === 'next' && <RecommendationsSection recommendations={recommendations.slice(0, 5)} />}
+        {activeTab === 'remediation' && <RemediationPlanningSection projectId={projectId} refreshToken={refreshToken} />}
         {activeTab === 'intelligence' && (
-          <MistiqFailureIntelligence
-            projectId={projectId}
-            source={source}
-            sseState={sseState}
-            failureDna={failureDna}
-            refreshToken={refreshToken}
-          />
+          <>
+            <PredictiveIntelligenceSection projectId={projectId} />
+            <MistiqFailureIntelligence
+              projectId={projectId}
+              source={source}
+              sseState={sseState}
+              failureDna={failureDna}
+              refreshToken={refreshToken}
+            />
+          </>
         )}
       </div>
 

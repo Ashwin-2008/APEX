@@ -168,7 +168,12 @@ class ReviewedProject(Base):
     notifications: Mapped[list["Notification"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     activity_events: Mapped[list["ActivityEvent"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     remediation_transactions: Mapped[list["RemediationTransaction"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+    remediation_workflows: Mapped[list["RemediationWorkflowRecord"]] = relationship(back_populates="project", cascade="all, delete-orphan")
     graph_versions: Mapped[list["EngineeringGraphVersion"]] = relationship(back_populates="project", cascade="all, delete-orphan")
+
+    @property
+    def repo_path(self) -> str:
+        return self.repository_path
 
 
 class ProjectReview(Base):
@@ -213,6 +218,18 @@ class ProjectFinding(Base):
     suppressed_at: Mapped[datetime | None] = mapped_column(DateTime)
     suppressed_by: Mapped[int | None] = mapped_column(Integer)
     review: Mapped[ProjectReview] = relationship(back_populates="findings")
+
+    @property
+    def file_path(self) -> str | None:
+        return self.file
+
+    @property
+    def line_number(self) -> int | None:
+        return self.line
+
+    @property
+    def rule_id(self) -> str:
+        return self.component or self.analyzer_source or self.fingerprint or "UNKNOWN_RULE"
 
 
 class ProjectPrediction(Base):
@@ -389,4 +406,356 @@ class EngineeringGraphUpdateJournal(Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     version: Mapped[EngineeringGraphVersion] = relationship()
+
+
+class PredictiveDatasetRecord(Base):
+    __tablename__ = "predictive_datasets"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    dataset_id: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    project_id: Mapped[int | None] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=True)
+    dataset_version: Mapped[str] = mapped_column(String(50), nullable=False, default="v1.0.0")
+    provenance_classification: Mapped[str] = mapped_column(String(50), nullable=False, default="CURATED_REAL")
+    label_source: Mapped[str] = mapped_column(String(100), nullable=False)
+    label_confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    time_range_start: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    time_range_end: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    sample_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    feature_schema_version: Mapped[str] = mapped_column(String(50), nullable=False, default="v1.0.0")
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    project: Mapped[ReviewedProject | None] = relationship()
+
+
+class PredictiveModelRecord(Base):
+    __tablename__ = "predictive_models"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    model_id: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    model_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    prediction_task: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    algorithm: Mapped[str] = mapped_column(String(80), nullable=False)
+    training_dataset_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    feature_schema_version: Mapped[str] = mapped_column(String(50), nullable=False, default="v1.0.0")
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="PRODUCTION")
+    evaluation_metrics: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    artifact_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    artifact_sha256: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+
+class PredictivePredictionRecord(Base):
+    __tablename__ = "predictive_predictions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    prediction_id: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    target_entity: Mapped[str] = mapped_column(String(500), index=True, nullable=False)
+    prediction_task: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    prediction_horizon: Mapped[str] = mapped_column(String(50), nullable=False, default="NEXT_CHANGE")
+    model_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(50), nullable=False)
+    dataset_version: Mapped[str] = mapped_column(String(50), nullable=False, default="v1.0.0")
+    feature_schema_version: Mapped[str] = mapped_column(String(50), nullable=False, default="v1.0.0")
+    state: Mapped[str] = mapped_column(String(50), nullable=False, default="PREDICTION_AVAILABLE")
+    predicted_outcome: Mapped[str] = mapped_column(String(200), nullable=False)
+    probability: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    supporting_evidence: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    explanation: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    limitations: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    project: Mapped[ReviewedProject] = relationship()
+    feedback: Mapped[list["PredictiveFeedbackRecord"]] = relationship(back_populates="prediction", cascade="all, delete-orphan")
+
+
+class PredictiveFeedbackRecord(Base):
+    __tablename__ = "predictive_feedback"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    prediction_id: Mapped[str] = mapped_column(ForeignKey("predictive_predictions.prediction_id", ondelete="CASCADE"), index=True, nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    feedback_category: Mapped[str] = mapped_column(String(50), nullable=False)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    prediction: Mapped[PredictivePredictionRecord] = relationship(back_populates="feedback")
+    project: Mapped[ReviewedProject] = relationship()
+
+
+# =====================================================================
+# Phase 5.1: Autonomous Remediation Orchestrator Persistence Models
+# =====================================================================
+
+
+class RemediationWorkflowRecord(Base):
+    __tablename__ = "remediation_workflows"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workflow_id: Mapped[str] = mapped_column(String(80), unique=True, index=True, nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    state: Mapped[str] = mapped_column(String(50), index=True, nullable=False, default="DISCOVERED")
+    risk_level: Mapped[str] = mapped_column(String(20), nullable=False, default="MEDIUM")
+    approval_policy: Mapped[str] = mapped_column(String(50), nullable=False, default="REQUIRE_HUMAN")
+    idempotency_key: Mapped[str] = mapped_column(String(120), unique=True, index=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    # Concurrency and lease governance
+    version_id: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    lease_holder: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    worker_instance_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    fencing_token: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    # Retry and timeout handling
+    retry_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_retries: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+
+    # Active pointers
+    active_plan_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    active_candidate_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    active_transaction_id: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    project: Mapped[ReviewedProject] = relationship(back_populates="remediation_workflows")
+    workflow_findings: Mapped[list["RemediationWorkflowFinding"]] = relationship(back_populates="workflow", cascade="all, delete-orphan")
+    hypotheses: Mapped[list["RemediationRootCauseHypothesisRecord"]] = relationship(back_populates="workflow", cascade="all, delete-orphan")
+    clusters: Mapped[list["RemediationFindingClusterRecord"]] = relationship(back_populates="workflow", cascade="all, delete-orphan")
+    plans: Mapped[list["RemediationPlanRecord"]] = relationship(back_populates="workflow", cascade="all, delete-orphan")
+    candidates: Mapped[list["RemediationCandidateRecord"]] = relationship(back_populates="workflow", cascade="all, delete-orphan")
+    approvals: Mapped[list["RemediationApprovalRecord"]] = relationship(back_populates="workflow", cascade="all, delete-orphan")
+    audit_events: Mapped[list["RemediationAuditEvent"]] = relationship(back_populates="workflow", passive_deletes=True)
+    outbox_events: Mapped[list["RemediationOutboxEvent"]] = relationship(back_populates="workflow", cascade="all, delete-orphan")
+
+
+class RemediationRootCauseHypothesisRecord(Base):
+    __tablename__ = "remediation_root_cause_hypotheses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    hypothesis_id: Mapped[str] = mapped_column(String(80), unique=True, index=True, nullable=False)
+    workflow_id: Mapped[str] = mapped_column(ForeignKey("remediation_workflows.workflow_id", ondelete="CASCADE"), index=True, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    category: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False, default="INFERRED")
+    title: Mapped[str] = mapped_column(String(300), nullable=False)
+    explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    supporting_evidence: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    contradicting_evidence: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    affected_files: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    affected_symbols: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    related_finding_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    confidence_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    evidence_completeness: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)
+    verification_requirements: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    provenance: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    @property
+    def evidence_completeness_score(self) -> float:
+        return self.evidence_completeness
+
+    workflow: Mapped[RemediationWorkflowRecord] = relationship(back_populates="hypotheses")
+
+
+class RemediationFindingClusterRecord(Base):
+    __tablename__ = "remediation_finding_clusters"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cluster_id: Mapped[str] = mapped_column(String(80), unique=True, index=True, nullable=False)
+    workflow_id: Mapped[str] = mapped_column(ForeignKey("remediation_workflows.workflow_id", ondelete="CASCADE"), index=True, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    primary_finding_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    cluster_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    thematic_category: Mapped[str] = mapped_column(String(80), nullable=False)
+    correlation_rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence_score: Mapped[float] = mapped_column(Float, nullable=False, default=0.8)
+    is_manually_adjusted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    workflow: Mapped[RemediationWorkflowRecord] = relationship(back_populates="clusters")
+    cluster_findings: Mapped[list["RemediationClusterFinding"]] = relationship(back_populates="cluster", cascade="all, delete-orphan")
+
+
+class RemediationClusterFinding(Base):
+    __tablename__ = "remediation_cluster_findings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cluster_id: Mapped[str] = mapped_column(ForeignKey("remediation_finding_clusters.cluster_id", ondelete="CASCADE"), index=True, nullable=False)
+    finding_id: Mapped[int] = mapped_column(ForeignKey("project_findings.id", ondelete="CASCADE"), index=True, nullable=False)
+    correlation_weight: Mapped[float] = mapped_column(Float, default=1.0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    __table_args__ = (UniqueConstraint("cluster_id", "finding_id", name="uq_cluster_finding"),)
+
+    cluster: Mapped[RemediationFindingClusterRecord] = relationship(back_populates="cluster_findings")
+    finding: Mapped[ProjectFinding] = relationship()
+
+
+class RemediationWorkflowFinding(Base):
+    __tablename__ = "remediation_workflow_findings"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    workflow_id: Mapped[str] = mapped_column(ForeignKey("remediation_workflows.workflow_id", ondelete="CASCADE"), index=True, nullable=False)
+    finding_id: Mapped[int] = mapped_column(ForeignKey("project_findings.id", ondelete="CASCADE"), index=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    __table_args__ = (UniqueConstraint("workflow_id", "finding_id", name="uq_remediation_workflow_finding"),)
+
+    workflow: Mapped[RemediationWorkflowRecord] = relationship(back_populates="workflow_findings")
+    finding: Mapped[ProjectFinding] = relationship()
+
+
+class RemediationPlanRecord(Base):
+    __tablename__ = "remediation_plans"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    plan_id: Mapped[str] = mapped_column(String(80), unique=True, index=True, nullable=False)
+    workflow_id: Mapped[str] = mapped_column(ForeignKey("remediation_workflows.workflow_id", ondelete="CASCADE"), index=True, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    strategy_name: Mapped[str] = mapped_column(String(100), nullable=False, default="TARGETED_FIX")
+    strategy_description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    target_findings: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    affected_files: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    root_cause_reference: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    proposed_changes_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    regression_risks: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    required_tests: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    rollback_strategy: Mapped[str] = mapped_column(String(100), nullable=False, default="MULTI_FILE_JOURNAL_RESTORE")
+    risk_assessment: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    plan_score: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+    score_breakdown: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    ranking_explanation: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approval_tier_required: Mapped[str] = mapped_column(String(50), default="REQUIRE_HUMAN", nullable=False)
+    estimated_complexity: Mapped[str] = mapped_column(String(30), default="MEDIUM", nullable=False)
+    is_preferred: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    abstain_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    workflow: Mapped[RemediationWorkflowRecord] = relationship(back_populates="plans")
+
+
+class RemediationCandidateRecord(Base):
+    __tablename__ = "remediation_candidates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    candidate_id: Mapped[str] = mapped_column(String(80), unique=True, index=True, nullable=False)
+    workflow_id: Mapped[str] = mapped_column(ForeignKey("remediation_workflows.workflow_id", ondelete="CASCADE"), index=True, nullable=False)
+    plan_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    strategy: Mapped[str] = mapped_column(String(50), nullable=False)
+    diff_unified: Mapped[str] = mapped_column(Text, nullable=False)
+    diff_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    files_manifest: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    lifecycle_state: Mapped[str] = mapped_column(String(50), nullable=False, default="GENERATED")
+    candidate_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    base_commit_sha: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    workflow: Mapped[RemediationWorkflowRecord] = relationship(back_populates="candidates")
+    verifications: Mapped[list["RemediationVerificationRecord"]] = relationship(back_populates="candidate", cascade="all, delete-orphan")
+    approvals: Mapped[list["RemediationApprovalRecord"]] = relationship(back_populates="candidate", cascade="all, delete-orphan")
+
+
+class RemediationVerificationRecord(Base):
+    __tablename__ = "remediation_verifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    verification_id: Mapped[str] = mapped_column(String(80), unique=True, index=True, nullable=False)
+    candidate_id: Mapped[str] = mapped_column(ForeignKey("remediation_candidates.candidate_id", ondelete="CASCADE"), index=True, nullable=False)
+    workflow_id: Mapped[str] = mapped_column(ForeignKey("remediation_workflows.workflow_id", ondelete="CASCADE"), index=True, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
+    stages_executed: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    stage_results: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    regressions_detected: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    tests_passed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tests_failed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    candidate: Mapped[RemediationCandidateRecord] = relationship(back_populates="verifications")
+
+
+class RemediationApprovalRecord(Base):
+    __tablename__ = "remediation_approvals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    approval_id: Mapped[str] = mapped_column(String(80), unique=True, index=True, nullable=False)
+    workflow_id: Mapped[str] = mapped_column(ForeignKey("remediation_workflows.workflow_id", ondelete="CASCADE"), index=True, nullable=False)
+    candidate_id: Mapped[str] = mapped_column(ForeignKey("remediation_candidates.candidate_id", ondelete="CASCADE"), index=True, nullable=False)
+    candidate_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    base_commit_sha: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    patch_content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_finding_ids: Mapped[list] = mapped_column(JSON, default=list, nullable=False)
+    approval_context_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    approving_actor: Mapped[str] = mapped_column(String(120), nullable=False)
+    decision: Mapped[str] = mapped_column(String(30), nullable=False)
+    risk_classification: Mapped[str] = mapped_column(String(20), nullable=False)
+    approval_policy: Mapped[str] = mapped_column(String(50), nullable=False)
+    decision_rationale: Mapped[str] = mapped_column(Text, nullable=False)
+    is_valid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    revocation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    workflow: Mapped[RemediationWorkflowRecord] = relationship(back_populates="approvals")
+    candidate: Mapped[RemediationCandidateRecord] = relationship(back_populates="approvals")
+
+
+class RemediationAuditEvent(Base):
+    __tablename__ = "remediation_audit_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(80), unique=True, index=True, nullable=False)
+    original_workflow_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    workflow_id: Mapped[str | None] = mapped_column(ForeignKey("remediation_workflows.workflow_id", ondelete="SET NULL"), index=True, nullable=True)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    project_id: Mapped[int] = mapped_column(ForeignKey("reviewed_projects.id", ondelete="CASCADE"), index=True, nullable=False)
+    sequence_number: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    prev_event_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="GENESIS")
+    event_hash: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    from_state: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    to_state: Mapped[str] = mapped_column(String(50), nullable=False)
+    action: Mapped[str] = mapped_column(String(80), nullable=False)
+    actor: Mapped[str] = mapped_column(String(120), nullable=False)
+    event_payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    __table_args__ = (UniqueConstraint("original_workflow_id", "sequence_number", name="uq_remediation_audit_seq"),)
+
+    workflow: Mapped[RemediationWorkflowRecord | None] = relationship(back_populates="audit_events")
+
+
+class RemediationOutboxEvent(Base):
+    __tablename__ = "remediation_outbox_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    event_id: Mapped[str] = mapped_column(String(80), unique=True, index=True, nullable=False)
+    workflow_id: Mapped[str] = mapped_column(ForeignKey("remediation_workflows.workflow_id", ondelete="CASCADE"), index=True, nullable=False)
+    tenant_id: Mapped[str] = mapped_column(String(80), index=True, nullable=False)
+    event_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="PENDING")
+    locked_by: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    max_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    next_retry_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, index=True)
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
+
+    workflow: Mapped[RemediationWorkflowRecord] = relationship(back_populates="outbox_events")
+
 

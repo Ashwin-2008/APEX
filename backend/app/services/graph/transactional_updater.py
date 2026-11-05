@@ -23,6 +23,7 @@ import hashlib
 import logging
 from pathlib import Path
 from typing import Any
+import uuid
 
 from sqlalchemy.orm import Session
 
@@ -116,8 +117,11 @@ class TransactionalGraphUpdater:
         return journal
 
     @classmethod
-    def check_and_acquire_concurrency_lock(cls, db: Session, project_id: int) -> None:
-        """Verifies that no other concurrent worker is actively staging an update for this project."""
+    def check_and_acquire_concurrency_lock(cls, db: Session, project_id: int) -> str:
+        """Verifies that no other concurrent worker is actively staging an update for this project,
+
+        and returns a unique fencing lease token.
+        """
         active_staging = (
             db.query(EngineeringGraphVersion)
             .filter(
@@ -126,15 +130,97 @@ class TransactionalGraphUpdater:
             )
             .first()
         )
-        if not active_staging:
-            return
+        if active_staging:
+            # Check age of most recent journal entry
+            recent_jnl = (
+                db.query(EngineeringGraphUpdateJournal)
+                .filter(
+                    EngineeringGraphUpdateJournal.project_id == project_id,
+                    EngineeringGraphUpdateJournal.version_id == active_staging.id,
+                )
+                .order_by(EngineeringGraphUpdateJournal.id.desc())
+                .first()
+            )
+            if recent_jnl and recent_jnl.created_at:
+                created_tz = recent_jnl.created_at.replace(tzinfo=timezone.utc) if recent_jnl.created_at.tzinfo is None else recent_jnl.created_at
+                now_tz = datetime.now(timezone.utc)
+                delta = (now_tz - created_tz).total_seconds()
+                if delta < cls.STAGING_LOCK_TIMEOUT_SECONDS:
+                    raise RuntimeError(
+                        f"Concurrent graph update rejected: staging in progress for project {project_id} "
+                        f"(version {active_staging.version_number}, stage '{recent_jnl.stage}', age {int(delta)}s)"
+                    )
+                else:
+                    # Staging lease expired: recover interrupted version
+                    cls.recover_interrupted_updates(db, project_id)
 
-        # Check age of most recent journal entry
+        lease_token = str(uuid.uuid4())
+        return lease_token
+
+    @classmethod
+    def renew_concurrency_lease(
+        cls,
+        db: Session,
+        project_id: int,
+        version_id: int,
+        lease_token: str,
+    ) -> None:
+        """Extends an active staging lease, updating the heartbeat to prevent timeout."""
+        ver = db.query(EngineeringGraphVersion).filter(
+            EngineeringGraphVersion.id == version_id,
+            EngineeringGraphVersion.project_id == project_id,
+            EngineeringGraphVersion.status == "STAGED",
+        ).first()
+        if not ver:
+            raise RuntimeError(f"Cannot renew lease: version {version_id} is not in STAGED status.")
+
+        stored_token = (ver.metadata_json or {}).get("lease_token")
+        if stored_token and stored_token != lease_token:
+            raise RuntimeError("Fencing token mismatch: lease owned by another worker.")
+
+        cls.log_journal_entry(
+            db=db,
+            project_id=project_id,
+            version_id=version_id,
+            stage="LEASE_RENEWED",
+            manifest={"lease_token": lease_token, "renewed_at": datetime.now(timezone.utc).isoformat()},
+        )
+        db.commit()
+
+    @classmethod
+    def validate_lease_ownership(
+        cls,
+        db: Session,
+        project_id: int,
+        staging_version_id: int,
+        lease_token: str,
+    ) -> None:
+        """Validates that this worker still holds a valid unexpired lease immediately prior to activation."""
+        staging_ver = db.query(EngineeringGraphVersion).filter(
+            EngineeringGraphVersion.id == staging_version_id,
+            EngineeringGraphVersion.project_id == project_id,
+        ).first()
+
+        if not staging_ver:
+            raise RuntimeError(f"Stale worker error: staging version {staging_version_id} not found.")
+
+        if staging_ver.status != "STAGED":
+            raise RuntimeError(
+                f"Stale worker error: staging version {staging_version_id} is in status '{staging_ver.status}', expected 'STAGED'."
+            )
+
+        stored_token = (staging_ver.metadata_json or {}).get("lease_token")
+        if stored_token and stored_token != lease_token:
+            raise RuntimeError(
+                f"Fencing token mismatch: worker {lease_token} superseded by {stored_token}."
+            )
+
+        # Verify lease has not expired
         recent_jnl = (
             db.query(EngineeringGraphUpdateJournal)
             .filter(
                 EngineeringGraphUpdateJournal.project_id == project_id,
-                EngineeringGraphUpdateJournal.version_id == active_staging.id,
+                EngineeringGraphUpdateJournal.version_id == staging_version_id,
             )
             .order_by(EngineeringGraphUpdateJournal.id.desc())
             .first()
@@ -143,10 +229,9 @@ class TransactionalGraphUpdater:
             created_tz = recent_jnl.created_at.replace(tzinfo=timezone.utc) if recent_jnl.created_at.tzinfo is None else recent_jnl.created_at
             now_tz = datetime.now(timezone.utc)
             delta = (now_tz - created_tz).total_seconds()
-            if delta < cls.STAGING_LOCK_TIMEOUT_SECONDS:
+            if delta >= cls.STAGING_LOCK_TIMEOUT_SECONDS:
                 raise RuntimeError(
-                    f"Concurrent graph update rejected: staging in progress for project {project_id} "
-                    f"(version {active_staging.version_number}, stage '{recent_jnl.stage}', age {int(delta)}s)"
+                    f"Stale worker lease expired: stage age ({int(delta)}s) exceeded timeout ({cls.STAGING_LOCK_TIMEOUT_SECONDS}s)."
                 )
 
     @classmethod
@@ -246,7 +331,7 @@ class TransactionalGraphUpdater:
 
         # Step 0: Check concurrency lock and clean up stale stages
         cls.recover_interrupted_updates(db, project_id)
-        cls.check_and_acquire_concurrency_lock(db, project_id)
+        lease_token = cls.check_and_acquire_concurrency_lock(db, project_id)
 
         # Step 1: Load active graph and identify changes
         existing_nodes, existing_edges, active_ver = GraphStorageManager.load_active_graph(db, project_id)
@@ -293,6 +378,7 @@ class TransactionalGraphUpdater:
                 "deleted_files": sorted(deleted_set),
                 "changed_files_count": len(changed_set),
                 "deleted_files_count": len(deleted_set),
+                "lease_token": lease_token,
             },
         )
         db.add(staging_version)
@@ -398,6 +484,9 @@ class TransactionalGraphUpdater:
             staging_version.edge_count = len(edges)
 
             # Step 7: Atomic Activation within Transaction
+            # Validate that this worker still holds the valid unexpired lease
+            cls.validate_lease_ownership(db, project_id, staging_version.id, lease_token)
+
             # Deactivate previous active version(s)
             db.query(EngineeringGraphVersion).filter(
                 EngineeringGraphVersion.project_id == project_id,

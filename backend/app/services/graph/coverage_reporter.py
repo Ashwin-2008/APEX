@@ -98,6 +98,7 @@ class GraphCoverageReporter:
         sql_files = 0
         docker_files = 0
         ci_cd_files = 0
+        unsupported_files = 0
         total_discovered = 0
 
         for root, dirs, files in os.walk(repo_path):
@@ -113,10 +114,12 @@ class GraphCoverageReporter:
                     react_files += 1
                 elif fp.endswith(".sql"):
                     sql_files += 1
-                elif "dockerfile" in fp or "docker-compose" in fp:
+                elif "dockerfile" in fp or "docker-compose" in fp or "compose." in fp:
                     docker_files += 1
                 elif ".github/workflows" in fp and fp.endswith((".yml", ".yaml")):
                     ci_cd_files += 1
+                elif fp.endswith((".go", ".rs", ".rb", ".java", ".cpp", ".c", ".php")):
+                    unsupported_files += 1
 
         # Classify nodes and edges by domain
         py_symbols = [n for n in nodes.values() if n.file_path.endswith(".py") and n.entity_type in (NodeType.FUNCTION.value, NodeType.CLASS.value, NodeType.METHOD.value)]
@@ -315,6 +318,41 @@ class GraphCoverageReporter:
 
         # Compute aggregate dimensional breakdown
         active_techs = [t for t in technologies.values() if t.files_discovered > 0]
+        
+        # Calculate specific 8 evaluation dimensions
+        call_edges = [e for e in edges if e.rel_type == EdgeType.CALLS.value]
+        call_cov = round(((len(call_edges) - len(unresolved_edges)) / len(call_edges)) * 100.0, 1) if call_edges else 100.0
+        
+        cross_tech_edges = [
+            e for e in edges
+            if e.rel_type in (
+                EdgeType.CALLS_API.value,
+                EdgeType.QUERIES_MODEL.value,
+                EdgeType.EXECUTES_ENTRYPOINT.value,
+                EdgeType.RUNS_WORKFLOW_TEST.value,
+                EdgeType.CONSUMES_ENV_VAR.value,
+                EdgeType.DEPENDS_ON_SERVICE.value,
+            )
+        ]
+        cross_tech_cov = 100.0 if cross_tech_edges else (100.0 if not (react_files or docker_files or ci_cd_files) else 0.0)
+        
+        testable_nodes = [
+            n for n in nodes.values()
+            if n.entity_type in (NodeType.FUNCTION.value, NodeType.METHOD.value, NodeType.API_ENDPOINT.value)
+        ]
+        tested_node_cids = {e.source_canonical_id for e in edges if e.rel_type in (EdgeType.TESTED_BY.value, EdgeType.RUNS_WORKFLOW_TEST.value)}
+        test_traceability = round((len(tested_node_cids & {n.canonical_id for n in testable_nodes}) / len(testable_nodes)) * 100.0, 1) if testable_nodes else 100.0
+        
+        runtime_confirmed_edges = [
+            e for e in edges
+            if e.provenance.get("resolution") == "RESOLVED_RUNTIME" or e.confidence >= 1.0
+        ]
+        runtime_conf_rate = round((len(runtime_confirmed_edges) / len(edges)) * 100.0, 1) if edges else 0.0
+        
+        unsupported_cov = 0.0 if unsupported_files > 0 else 100.0
+        failed_files = len([n for n in nodes.values() if (n.metadata or {}).get("syntax_error")])
+        failed_extraction_rate = round((failed_files / max(1, total_discovered)) * 100.0, 1)
+
         if active_techs:
             dim_breakdown = {
                 "file_discovery": round(sum(t.file_discovery_coverage for t in active_techs) / len(active_techs), 1),
@@ -322,6 +360,15 @@ class GraphCoverageReporter:
                 "relationship_extraction": round(sum(t.relationship_extraction_coverage for t in active_techs) / len(active_techs), 1),
                 "framework_specific": round(sum(t.framework_specific_coverage for t in active_techs) / len(active_techs), 1),
                 "cross_language_resolution": round(sum(t.cross_language_resolution_coverage for t in active_techs) / len(active_techs), 1),
+                # Explicit 8 Evaluation Dimensions:
+                "file_discovery_coverage": round(sum(t.file_discovery_coverage for t in active_techs) / len(active_techs), 1),
+                "symbol_extraction_coverage": round(sum(t.symbol_extraction_coverage for t in active_techs) / len(active_techs), 1),
+                "call_relationship_coverage": max(0.0, min(100.0, call_cov)),
+                "cross_technology_relationship_coverage": cross_tech_cov,
+                "test_to_code_traceability": test_traceability,
+                "runtime_trace_confirmation": runtime_conf_rate,
+                "unsupported_technology_coverage": unsupported_cov,
+                "failed_extraction_coverage": failed_extraction_rate,
             }
         else:
             dim_breakdown = {
@@ -330,6 +377,14 @@ class GraphCoverageReporter:
                 "relationship_extraction": 0.0,
                 "framework_specific": 0.0,
                 "cross_language_resolution": 0.0,
+                "file_discovery_coverage": 0.0,
+                "symbol_extraction_coverage": 0.0,
+                "call_relationship_coverage": 0.0,
+                "cross_technology_relationship_coverage": 0.0,
+                "test_to_code_traceability": 0.0,
+                "runtime_trace_confirmation": 0.0,
+                "unsupported_technology_coverage": unsupported_cov,
+                "failed_extraction_coverage": failed_extraction_rate,
             }
 
         unresolved_reasons = []

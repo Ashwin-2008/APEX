@@ -50,6 +50,63 @@ The experiments pipeline is separate from online inference. API requests load th
 - React 18, TypeScript 5, Vite 5, React Router 6, Vitest 2.
 - SQLite is the default local database. Dependency versions are pinned in `backend/requirements.txt`; frontend versions are recorded in `frontend/package-lock.json`.
 
+## How to Run the Project (Quick Start)
+
+To start and run the full project, launch the backend and frontend in two separate terminals.
+
+### 1. Start the Backend API (FastAPI)
+
+From the project root:
+
+**PowerShell (Windows):**
+```powershell
+$env:PYTHONPATH="backend"
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+**Command Prompt (cmd.exe):**
+```cmd
+set PYTHONPATH=backend
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+**Bash / Linux / macOS:**
+```bash
+export PYTHONPATH=backend
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+*Alternative (from `backend/` directory):*
+```powershell
+cd backend
+python -m uvicorn app.main:app --reload
+```
+
+- **Health check:** http://127.0.0.1:8000/health (returns `{"status":"ok"}`)
+- **Swagger API Docs:** http://127.0.0.1:8000/docs
+
+---
+
+### 2. Start the Frontend (Vite + React)
+
+In a second terminal, start the UI:
+
+**From project root:**
+```powershell
+npm --prefix frontend run dev
+```
+
+**Or from `frontend/`:**
+```powershell
+cd frontend
+npm run dev
+```
+
+- **Web Application UI:** http://localhost:5173 (or http://127.0.0.1:5173)
+- Vite automatically proxies `/api` calls to http://127.0.0.1:8000.
+
+---
+
 ## Setup
 
 Create an environment and install dependencies:

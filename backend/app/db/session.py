@@ -94,6 +94,43 @@ def migrate_sqlite_schema(database_engine) -> None:
                 "score_components": "JSON",
                 "completed_at": "DATETIME",
             },
+            "remediation_workflows": {
+                "worker_instance_id": "VARCHAR(120)",
+            },
+            "remediation_plans": {
+                "strategy_name": "VARCHAR(100) NOT NULL DEFAULT 'TARGETED_FIX'",
+                "strategy_description": "TEXT",
+                "plan_score": "FLOAT NOT NULL DEFAULT 0.0",
+                "score_breakdown": "JSON NOT NULL DEFAULT '{}'",
+                "ranking_explanation": "TEXT",
+                "approval_tier_required": "VARCHAR(50) NOT NULL DEFAULT 'REQUIRE_HUMAN'",
+                "estimated_complexity": "VARCHAR(30) NOT NULL DEFAULT 'MEDIUM'",
+                "is_preferred": "BOOLEAN NOT NULL DEFAULT 0",
+                "abstain_reason": "TEXT",
+            },
+            "remediation_candidates": {
+                "candidate_version": "INTEGER NOT NULL DEFAULT 1",
+                "base_commit_sha": "VARCHAR(80)",
+            },
+            "remediation_approvals": {
+                "candidate_version": "INTEGER NOT NULL DEFAULT 1",
+                "base_commit_sha": "VARCHAR(80)",
+                "target_finding_ids": "JSON NOT NULL DEFAULT '[]'",
+                "approval_context_hash": "VARCHAR(64) NOT NULL DEFAULT ''",
+                "revoked_at": "DATETIME",
+                "revoked_by": "VARCHAR(120)",
+                "revocation_reason": "TEXT",
+            },
+            "remediation_audit_events": {
+                "original_workflow_id": "VARCHAR(80)",
+                "sequence_number": "INTEGER NOT NULL DEFAULT 1",
+                "prev_event_hash": "VARCHAR(64) NOT NULL DEFAULT 'GENESIS'",
+                "event_hash": "VARCHAR(64) NOT NULL DEFAULT ''",
+            },
+            "remediation_outbox_events": {
+                "locked_by": "VARCHAR(120)",
+                "locked_until": "DATETIME",
+            },
         }
         for table, columns in additive.items():
             if table not in inspect(connection).get_table_names():
@@ -115,6 +152,10 @@ def migrate_sqlite_schema(database_engine) -> None:
             connection.execute(text("CREATE INDEX IF NOT EXISTS idx_project_findings_suppressed ON project_findings(suppressed)"))
         if "notifications" in existing_tables:
             connection.execute(text("CREATE INDEX IF NOT EXISTS idx_notifications_user_seen ON notifications(user_id, seen)"))
+        if "predictive_predictions" in existing_tables:
+            connection.execute(text("CREATE INDEX IF NOT EXISTS idx_pred_project_task ON predictive_predictions(project_id, prediction_task)"))
+        if "predictive_feedback" in existing_tables:
+            connection.execute(text("CREATE INDEX IF NOT EXISTS idx_pred_feedback_proj ON predictive_feedback(project_id)"))
 
     # Data preservation: Ensure default admin exists and claim any unowned legacy projects
     with database_engine.begin() as conn:

@@ -590,10 +590,20 @@ class GraphExtractionEngine:
                     content = p.read_text(encoding="utf-8", errors="ignore")
                     for m in frontend_call_pattern.finditer(content):
                         route_url = m.group(1).split("?")[0].strip()
+                        norm_call = re.sub(r'\$\{[^}]+\}', '{param}', route_url).rstrip("/")
                         matched_endpoint = None
                         for ep_id, ep_node in api_endpoints.items():
                             ep_route = ep_node.metadata.get("route_path", "")
-                            if ep_route and (route_url == ep_route or route_url.endswith(ep_route) or ep_route.endswith(route_url)):
+                            if not ep_route:
+                                continue
+                            norm_ep = re.sub(r'\{[^}]+\}', '{param}', ep_route).rstrip("/")
+                            if norm_call == norm_ep or norm_call.endswith(norm_ep) or norm_ep.endswith(norm_call):
+                                matched_endpoint = ep_node
+                                break
+                            # Match parameterized root e.g. /api/v1/orders/
+                            base_call = norm_call.split("{param}")[0].rstrip("/")
+                            base_ep = norm_ep.split("{param}")[0].rstrip("/")
+                            if base_call and base_ep and base_call == base_ep:
                                 matched_endpoint = ep_node
                                 break
 
@@ -660,48 +670,142 @@ class GraphExtractionEngine:
                         except Exception:
                             pass
 
-        # 3. Dockerfile -> Application Entrypoint
+        # 3. Dockerfile -> Multi-stage builds and Application Entrypoints
         dockerfile = self.repo_root / "Dockerfile"
         if dockerfile.is_file():
             try:
                 docker_content = dockerfile.read_text(encoding="utf-8", errors="ignore")
                 cmd_match = re.search(r'(?:CMD|ENTRYPOINT)\s*\[?["\']?([^"\'\]\n]+)', docker_content, re.IGNORECASE)
-                stage_match = re.search(r'^\s*FROM\s+\S+\s+AS\s+(\S+)', docker_content, re.MULTILINE | re.IGNORECASE)
-                stage_name = stage_match.group(1).strip() if stage_match else "docker_runtime_stage"
-                if cmd_match or stage_match:
-                    cmd_str = cmd_match.group(1).strip() if cmd_match else ""
+                stage_matches = list(re.finditer(r'^\s*FROM\s+(\S+)(?:\s+AS\s+(\S+))?', docker_content, re.MULTILINE | re.IGNORECASE))
+                
+                stages_by_name: dict[str, str] = {}
+                for idx, sm in enumerate(stage_matches):
+                    base_img = sm.group(1).strip()
+                    stage_name = sm.group(2).strip() if sm.group(2) else f"stage_{idx}"
                     stage_id = build_canonical_id(self.project_id, "Dockerfile", stage_name, NodeType.DOCKER_STAGE)
-                    self.add_node(
-                        GraphNode(
-                            canonical_id=stage_id,
-                            project_id=self.project_id,
-                            entity_type=NodeType.DOCKER_STAGE.value,
-                            name=stage_name,
-                            qualified_name=f"Dockerfile::{stage_name}",
-                            file_path="Dockerfile",
-                            metadata={"entrypoint_cmd": cmd_str, "stage_name": stage_name},
+                    stages_by_name[stage_name] = stage_id
+                    if stage_id not in self.nodes:
+                        self.add_node(
+                            GraphNode(
+                                canonical_id=stage_id,
+                                project_id=self.project_id,
+                                entity_type=NodeType.DOCKER_STAGE.value,
+                                name=stage_name,
+                                qualified_name=f"Dockerfile::{stage_name}",
+                                file_path="Dockerfile",
+                                metadata={"base_image": base_img, "stage_name": stage_name, "stage_index": idx},
+                            )
                         )
-                    )
-                    entry_targets = {"backend/app/main.py", "app/main.py", "main.py", "backend/main.py"}
-                    if cmd_str:
-                        for token in cmd_str.replace('"', '').replace("'", '').replace(',', ' ').split():
-                            if token.endswith(".py") or token.endswith(".js") or token.endswith(".sh"):
-                                entry_targets.add(token.replace("\\", "/"))
-                                entry_targets.add(Path(token).name)
+                    # Check if this stage inherits from a previous stage
+                    if base_img in stages_by_name and stages_by_name[base_img] != stage_id:
+                        self.add_edge(
+                            stage_id,
+                            stages_by_name[base_img],
+                            EdgeType.DEPENDS_ON,
+                            confidence=0.95,
+                            evidence_location="Dockerfile",
+                            analyzer_source="cross_technology_docker_extractor",
+                        )
 
-                    for nid, n in self.nodes.items():
-                        if n.file_path in entry_targets or Path(n.file_path).name in entry_targets:
+                # Check COPY --from=stage dependencies
+                for copy_match in re.finditer(r'COPY\s+--from=(\S+)', docker_content, re.IGNORECASE):
+                    src_stg = copy_match.group(1).strip()
+                    if src_stg in stages_by_name and len(stages_by_name) > 1:
+                        # find destination stage
+                        curr_stage_id = list(stages_by_name.values())[-1]
+                        if curr_stage_id != stages_by_name[src_stg]:
                             self.add_edge(
-                                stage_id,
-                                nid,
-                                EdgeType.EXECUTES_ENTRYPOINT,
-                                confidence=0.95,
+                                curr_stage_id,
+                                stages_by_name[src_stg],
+                                EdgeType.DEPENDS_ON,
+                                confidence=0.92,
                                 evidence_location="Dockerfile",
                                 analyzer_source="cross_technology_docker_extractor",
                             )
-                            break
+
+                cmd_str = cmd_match.group(1).strip() if cmd_match else ""
+                entry_stage_id = list(stages_by_name.values())[-1] if stages_by_name else build_canonical_id(self.project_id, "Dockerfile", "docker_runtime_stage", NodeType.DOCKER_STAGE)
+                if entry_stage_id not in self.nodes:
+                    self.add_node(
+                        GraphNode(
+                            canonical_id=entry_stage_id,
+                            project_id=self.project_id,
+                            entity_type=NodeType.DOCKER_STAGE.value,
+                            name="docker_runtime_stage",
+                            qualified_name="Dockerfile::docker_runtime_stage",
+                            file_path="Dockerfile",
+                            metadata={"entrypoint_cmd": cmd_str},
+                        )
+                    )
+
+                entry_targets = {"backend/app/main.py", "app/main.py", "main.py", "backend/main.py"}
+                if cmd_str:
+                    for token in cmd_str.replace('"', '').replace("'", '').replace(',', ' ').split():
+                        if token.endswith(".py") or token.endswith(".js") or token.endswith(".sh"):
+                            entry_targets.add(token.replace("\\", "/"))
+                            entry_targets.add(Path(token).name)
+
+                for nid, n in self.nodes.items():
+                    if n.file_path in entry_targets or Path(n.file_path).name in entry_targets:
+                        self.add_edge(
+                            entry_stage_id,
+                            nid,
+                            EdgeType.EXECUTES_ENTRYPOINT,
+                            confidence=0.95,
+                            evidence_location="Dockerfile",
+                            analyzer_source="cross_technology_docker_extractor",
+                        )
+                        break
             except Exception:
                 pass
+
+        # 3.1 Docker Compose -> Service Dependencies
+        for compose_name in ("docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml"):
+            compose_file = self.repo_root / compose_name
+            if compose_file.is_file():
+                try:
+                    c_text = compose_file.read_text(encoding="utf-8", errors="ignore")
+                    rel_compose = compose_name
+                    # Parse service definitions and depends_on
+                    # Find services block
+                    import re as yaml_re
+                    service_blocks = yaml_re.findall(r'^\s\s([a-zA-Z0-9_-]+):\s*$', c_text, yaml_re.MULTILINE)
+                    svc_nodes: dict[str, str] = {}
+                    for svc in service_blocks:
+                        if svc in ("version", "services", "networks", "volumes"):
+                            continue
+                        svc_id = build_canonical_id(self.project_id, rel_compose, svc, NodeType.SERVICE)
+                        svc_nodes[svc] = svc_id
+                        self.add_node(
+                            GraphNode(
+                                canonical_id=svc_id,
+                                project_id=self.project_id,
+                                entity_type=NodeType.SERVICE.value,
+                                name=svc,
+                                qualified_name=f"ComposeService::{svc}",
+                                file_path=rel_compose,
+                                metadata={"compose_file": rel_compose, "service_name": svc},
+                            )
+                        )
+                    # Check depends_on relationships between services
+                    for svc, s_id in svc_nodes.items():
+                        # Extract section for this service
+                        pattern = rf'^\s\s{re.escape(svc)}:\s*\n((?:\s\s\s\s[^\n]+\n)*)'
+                        m = yaml_re.search(pattern, c_text, yaml_re.MULTILINE)
+                        if m:
+                            svc_body = m.group(1)
+                            for dep in svc_nodes.keys():
+                                if dep != svc and yaml_re.search(rf'depends_on:[\s\S]*?-\s+{re.escape(dep)}', svc_body):
+                                    self.add_edge(
+                                        s_id,
+                                        svc_nodes[dep],
+                                        EdgeType.DEPENDS_ON_SERVICE,
+                                        confidence=0.95,
+                                        evidence_location=rel_compose,
+                                        analyzer_source="cross_technology_compose_extractor",
+                                    )
+                except Exception:
+                    pass
 
         # 4. CI/CD Workflows -> Test Execution
         ci_dir = self.repo_root / ".github" / "workflows"
@@ -771,4 +875,75 @@ class GraphExtractionEngine:
                         )
             except Exception:
                 continue
+
+        # 6. Package Dependencies -> Dependency Nodes
+        pkg_json = self.repo_root / "package.json"
+        if pkg_json.is_file():
+            try:
+                import json as json_lib
+                data = json_lib.loads(pkg_json.read_text(encoding="utf-8", errors="ignore"))
+                all_deps = dict(data.get("dependencies", {}))
+                all_deps.update(data.get("devDependencies", {}))
+                pkg_file_id = build_canonical_id(self.project_id, "package.json", "package.json", NodeType.FILE)
+                for pkg_name, pkg_ver in all_deps.items():
+                    pkg_id = build_canonical_id(self.project_id, "", f"npm::{pkg_name}", NodeType.PACKAGE)
+                    if pkg_id not in self.nodes:
+                        self.add_node(
+                            GraphNode(
+                                canonical_id=pkg_id,
+                                project_id=self.project_id,
+                                entity_type=NodeType.PACKAGE.value,
+                                name=pkg_name,
+                                qualified_name=f"npm::{pkg_name}",
+                                file_path="",
+                                metadata={"ecosystem": "npm", "version_constraint": str(pkg_ver)},
+                            )
+                        )
+                    if pkg_file_id in self.nodes:
+                        self.add_edge(
+                            pkg_file_id,
+                            pkg_id,
+                            EdgeType.DEPENDS_ON,
+                            confidence=0.98,
+                            evidence_location="package.json",
+                            analyzer_source="cross_technology_pkg_extractor",
+                        )
+            except Exception:
+                pass
+
+        req_txt = self.repo_root / "requirements.txt"
+        if req_txt.is_file():
+            try:
+                r_lines = req_txt.read_text(encoding="utf-8", errors="ignore").splitlines()
+                req_file_id = build_canonical_id(self.project_id, "requirements.txt", "requirements.txt", NodeType.FILE)
+                for line in r_lines:
+                    line_s = line.strip()
+                    if not line_s or line_s.startswith("#") or line_s.startswith("-"):
+                        continue
+                    pkg_name = re.split(r'[<>=!~]', line_s)[0].strip()
+                    if pkg_name:
+                        pkg_id = build_canonical_id(self.project_id, "", f"pypi::{pkg_name}", NodeType.PACKAGE)
+                        if pkg_id not in self.nodes:
+                            self.add_node(
+                                GraphNode(
+                                    canonical_id=pkg_id,
+                                    project_id=self.project_id,
+                                    entity_type=NodeType.PACKAGE.value,
+                                    name=pkg_name,
+                                    qualified_name=f"pypi::{pkg_name}",
+                                    file_path="",
+                                    metadata={"ecosystem": "pypi", "specifier": line_s},
+                                )
+                            )
+                        if req_file_id in self.nodes:
+                            self.add_edge(
+                                req_file_id,
+                                pkg_id,
+                                EdgeType.DEPENDS_ON,
+                                confidence=0.98,
+                                evidence_location="requirements.txt",
+                                analyzer_source="cross_technology_pkg_extractor",
+                            )
+            except Exception:
+                pass
 

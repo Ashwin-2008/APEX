@@ -17,6 +17,11 @@ def test_database_initialization() -> None:
         "remediation_transactions", "remediation_locks",
         "engineering_graph_versions", "engineering_graph_nodes", "engineering_graph_edges",
         "engineering_identity_transitions", "engineering_graph_update_journals",
+        "predictive_datasets", "predictive_models", "predictive_predictions", "predictive_feedback",
+        "remediation_workflows", "remediation_workflow_findings", "remediation_plans",
+        "remediation_candidates", "remediation_verifications", "remediation_approvals",
+        "remediation_audit_events", "remediation_outbox_events",
+        "remediation_root_cause_hypotheses", "remediation_finding_clusters", "remediation_cluster_findings",
     }
 
 

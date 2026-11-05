@@ -4,7 +4,7 @@ from app.api.routes import attempts, questions, students
 from app.api.routes import predictions, progress, health, recommendations
 from app.api.routes import research
 from app.api.routes import project_reviews
-from app.api.routes import auth, projects, notifications
+from app.api.routes import auth, projects, notifications, remediation_routes
 
 api_router = APIRouter()
 api_router.include_router(auth.router, tags=["auth"])
@@ -19,3 +19,4 @@ api_router.include_router(progress.router, tags=["progress"])
 api_router.include_router(health.router, tags=["health"])
 api_router.include_router(research.router)
 api_router.include_router(project_reviews.router, tags=["project-reviews"])
+api_router.include_router(remediation_routes.router, tags=["remediation"])

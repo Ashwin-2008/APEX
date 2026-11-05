@@ -348,8 +348,13 @@ class IdentityContinuityEngine:
                                 }
                                 if new_sym_names:
                                     jaccard = len(old_sym_names & new_sym_names) / len(old_sym_names | new_sym_names)
-                                    name_ratio = difflib.SequenceMatcher(None, Path(old_f).name, Path(new_f).name).ratio()
-                                    if jaccard >= 0.70 and (len(old_sym_names & new_sym_names) >= 2 or name_ratio >= 0.60):
+                                    stem_ratio = difflib.SequenceMatcher(None, Path(old_f).stem, Path(new_f).stem).ratio()
+                                    common_syms = len(old_sym_names & new_sym_names)
+                                    is_valid_file_match = (
+                                        jaccard >= 0.75
+                                        and stem_ratio >= 0.60
+                                    )
+                                    if is_valid_file_match:
                                         if jaccard > best_score:
                                             best_score = jaccard
                                             best_match = new_f
@@ -662,6 +667,7 @@ class IdentityContinuityBenchmark:
                 "ambiguous_count": float(ambiguous_count),
                 "ambiguous_rate": round(amb_rate, 4),
                 "ambiguous_match_rate": round(amb_rate, 4),
+                "incorrect_identity_merge_rate": round(fp / total_cases, 4) if total_cases > 0 else 0.0,
             }
 
         true_matches = 0
@@ -716,5 +722,9 @@ class IdentityContinuityBenchmark:
             "precision": round(precision, 4),
             "recall": round(recall, 4),
             "f1": round(f1, 4),
+            "f1_score": round(f1, 4),
+            "ambiguous_count": float(ambiguous_matches),
+            "ambiguous_rate": round(ambiguous_rate, 4),
             "ambiguous_match_rate": round(ambiguous_rate, 4),
+            "incorrect_identity_merge_rate": round(false_matches / total_cases, 4) if total_cases > 0 else 0.0,
         }

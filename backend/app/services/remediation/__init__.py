@@ -5,6 +5,16 @@ from app.services.remediation.behavioral_verifier import (
     BehavioralVerifier,
 )
 from app.services.remediation.crash_recovery import CrashRecoveryEngine
+from app.services.remediation.orchestrator import (
+    ApprovalValidationError,
+    ConcurrencyConflictError,
+    InvalidStateTransitionError,
+    LeaseFencingError,
+    RemediationOrchestrator,
+    RemediationWorkflowState,
+    TERMINAL_WORKFLOW_STATES,
+    VALID_WORKFLOW_TRANSITIONS,
+)
 from app.services.remediation.patch_confidence import (
     ConfidenceDimension,
     PatchConfidenceEngine,
@@ -51,14 +61,18 @@ from app.services.remediation.transaction_engine import (
 )
 
 __all__ = [
+    "ApprovalValidationError",
     "AuditEvent",
     "BehavioralStatus",
     "BehavioralVerificationResult",
     "BehavioralVerifier",
     "CodePatch",
+    "ConcurrencyConflictError",
     "ConfidenceDimension",
     "CrashRecoveryEngine",
     "FunctionContract",
+    "InvalidStateTransitionError",
+    "LeaseFencingError",
     "LockAcquisitionError",
     "MultiFileTransactionEngine",
     "PatchConfidenceEngine",
@@ -76,13 +90,17 @@ __all__ = [
     "PostApplyOutcome",
     "PostApplyVerificationResult",
     "PostApplyVerifier",
+    "RemediationOrchestrator",
+    "RemediationWorkflowState",
     "RepositoryLockContext",
     "RepositoryLockManager",
     "RollbackConflictError",
     "SemanticRisk",
     "SemanticVerificationResult",
     "SemanticVerifier",
+    "TERMINAL_WORKFLOW_STATES",
     "TransactionState",
+    "VALID_WORKFLOW_TRANSITIONS",
     "compute_content_sha256",
     "global_patch_manager",
 ]

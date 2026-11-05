@@ -505,6 +505,37 @@ class AdvancedCallResolver:
         total_sample_size = len(predicted_edges)
         is_conclusive = total_sample_size >= 30
 
+        # Expected Calibration Error (ECE) across 10 deciles
+        num_bins = 10
+        bins: dict[int, list[tuple[float, bool]]] = {i: [] for i in range(num_bins)}
+        for e in predicted_edges:
+            pair = (e.source_canonical_id, e.target_canonical_id)
+            is_true = pair in ground_truth
+            conf = max(0.0, min(1.0, e.confidence))
+            bin_idx = min(num_bins - 1, int(conf * num_bins))
+            bins[bin_idx].append((conf, is_true))
+
+        ece_sum = 0.0
+        n_total = len(predicted_edges)
+        for b_items in bins.values():
+            if b_items:
+                bin_size = len(b_items)
+                avg_conf = sum(x[0] for x in b_items) / bin_size
+                avg_acc = sum(1.0 for x in b_items if x[1]) / bin_size
+                ece_sum += (bin_size / n_total) * abs(avg_acc - avg_conf)
+
+        ece = round(ece_sum, 4) if n_total > 0 else 0.0
+
+        unresolved_count = sum(1 for e in predicted_edges if e.provenance.get("resolution") == CallResolutionType.UNRESOLVED.value)
+        ambiguous_count = sum(1 for e in predicted_edges if e.provenance.get("resolution") == CallResolutionType.AMBIGUOUS.value)
+        unresolved_rate = round(unresolved_count / n_total, 4) if n_total > 0 else 0.0
+        ambiguous_rate = round(ambiguous_count / n_total, 4) if n_total > 0 else 0.0
+
+        category_counts: dict[str, int] = {}
+        for e in predicted_edges:
+            cat = e.provenance.get("resolution_method", e.provenance.get("resolution", "UNKNOWN"))
+            category_counts[cat] = category_counts.get(cat, 0) + 1
+
         return {
             "true_positives": float(tp),
             "false_positives": float(fp),
@@ -514,12 +545,16 @@ class AdvancedCallResolver:
             "f1": round(f1, 4),
             "confusion_matrix": confusion_matrix,
             "brier_calibration_error": brier_score,
+            "expected_calibration_error": ece,
+            "unresolved_rate": unresolved_rate,
+            "ambiguous_rate": ambiguous_rate,
+            "category_counts": category_counts,
             "sample_size": total_sample_size,
             "is_statistically_conclusive": is_conclusive,
             "calibration_status": (
                 "CALIBRATED"
                 if is_conclusive
-                else "INCONCLUSIVE_SAMPLE_TOO_SMALL (Confidence treated as evidence rank score)"
+                else "EXPLORATORY_INCONCLUSIVE (Sample size < 30 insufficient for robust decile calibration)"
             ),
         }
 

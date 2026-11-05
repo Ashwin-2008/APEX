@@ -344,3 +344,416 @@ export async function scanRecovery(
     method: 'POST',
   })
 }
+
+// =====================================================================
+// Phase 5.1: Durable Remediation Orchestrator Workflow APIs
+// =====================================================================
+
+export interface RemediationWorkflowSummary {
+  workflow_id: string
+  project_id: number
+  tenant_id: string
+  state: string
+  risk_level: string
+  approval_policy: string
+  idempotency_key: string
+  title: string
+  description?: string | null
+  version_id: number
+  retry_count: number
+  created_at: string
+  updated_at: string
+}
+
+export interface RemediationWorkflowDetail extends RemediationWorkflowSummary {
+  finding_ids: number[]
+  active_plan_id?: string | null
+  active_candidate_id?: string | null
+  active_transaction_id?: string | null
+  error_message?: string | null
+  lease_holder?: string | null
+  fencing_token: number
+}
+
+export interface WorkflowAuditEvent {
+  event_id: string
+  workflow_id: string
+  from_state?: string | null
+  to_state: string
+  action: string
+  actor: string
+  event_payload: Record<string, any>
+  created_at: string
+}
+
+export interface CandidatePatch {
+  candidate_id: string
+  workflow_id: string
+  plan_id: string
+  strategy: string
+  diff_unified: string
+  diff_hash: string
+  files_manifest: Record<string, any>
+  lifecycle_state: string
+  created_at: string
+}
+
+export interface WorkflowApproval {
+  approval_id: string
+  workflow_id: string
+  candidate_id: string
+  patch_content_hash: string
+  approving_actor: string
+  decision: string
+  risk_classification: string
+  approval_policy: string
+  decision_rationale: string
+  is_valid: boolean
+  created_at: string
+}
+
+export async function createRemediationWorkflow(
+  projectId: number | string,
+  data: {
+    finding_ids: number[]
+    title: string
+    description?: string
+    risk_level?: string
+    approval_policy?: string
+    idempotency_key?: string
+  }
+): Promise<RemediationWorkflowDetail> {
+  return request<RemediationWorkflowDetail>(`/projects/${projectId}/remediation/workflows`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export async function listRemediationWorkflows(
+  projectId: number | string,
+  options: { skip?: number; limit?: number; state?: string } = {}
+): Promise<RemediationWorkflowSummary[]> {
+  const params = new URLSearchParams()
+  if (options.skip !== undefined) params.set('skip', String(options.skip))
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  if (options.state) params.set('state', options.state)
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  return request<RemediationWorkflowSummary[]>(`/projects/${projectId}/remediation/workflows${qs}`)
+}
+
+export async function getRemediationWorkflow(
+  projectId: number | string,
+  workflowId: string
+): Promise<RemediationWorkflowDetail> {
+  return request<RemediationWorkflowDetail>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}`
+  )
+}
+
+export async function cancelRemediationWorkflow(
+  projectId: number | string,
+  workflowId: string,
+  reason: string = 'User requested cancellation'
+): Promise<RemediationWorkflowSummary> {
+  return request<RemediationWorkflowSummary>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/cancel`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }
+  )
+}
+
+export async function getRemediationWorkflowHistory(
+  projectId: number | string,
+  workflowId: string,
+  options: { skip?: number; limit?: number } = {}
+): Promise<WorkflowAuditEvent[]> {
+  const params = new URLSearchParams()
+  if (options.skip !== undefined) params.set('skip', String(options.skip))
+  if (options.limit !== undefined) params.set('limit', String(options.limit))
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  return request<WorkflowAuditEvent[]>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/history${qs}`
+  )
+}
+
+export async function listRemediationWorkflowCandidates(
+  projectId: number | string,
+  workflowId: string
+): Promise<CandidatePatch[]> {
+  return request<CandidatePatch[]>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/candidates`
+  )
+}
+
+export async function listRemediationWorkflowApprovals(
+  projectId: number | string,
+  workflowId: string
+): Promise<WorkflowApproval[]> {
+  return request<WorkflowApproval[]>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/approvals`
+  )
+}
+
+export async function recordWorkflowApproval(
+  projectId: number | string,
+  workflowId: string,
+  data: {
+    candidate_id: string
+    patch_content_hash: string
+    decision: 'APPROVED' | 'REJECTED'
+    rationale: string
+    candidate_version?: number
+    base_commit_sha?: string
+  }
+): Promise<WorkflowApproval> {
+  return request<WorkflowApproval>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/approve`,
+    {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }
+  )
+}
+
+export async function revokeWorkflowApproval(
+  projectId: number | string,
+  workflowId: string,
+  approvalId: string,
+  reason: string
+): Promise<WorkflowApproval> {
+  return request<WorkflowApproval>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/approvals/${encodeURIComponent(approvalId)}/revoke`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }
+  )
+}
+
+export interface AuditChainVerifyResult {
+  workflow_id: string
+  is_valid: boolean
+  errors: string[]
+}
+
+export async function verifyWorkflowAuditChain(
+  projectId: number | string,
+  workflowId: string
+): Promise<AuditChainVerifyResult> {
+  return request<AuditChainVerifyResult>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/audit-events/verify`
+  )
+}
+
+// =====================================================================
+// Phase 5.2: Root Cause Investigation & Remediation Planning API
+// =====================================================================
+
+export interface RemediationHypothesis {
+  hypothesis_id: string
+  workflow_id: string
+  title: string
+  category: string
+  explanation: string
+  confidence_score: number
+  status: 'CONFIRMED' | 'STRONGLY_SUPPORTED' | 'INFERRED' | 'INSUFFICIENT_EVIDENCE' | 'REJECTED'
+  supporting_evidence: Array<{
+    source_type: string
+    summary: string
+    confidence: number
+    finding_id?: number
+    metadata?: Record<string, any>
+  }>
+  contradicting_evidence: Array<{
+    source_type: string
+    summary: string
+    confidence: number
+  }>
+  affected_symbols: string[]
+  affected_files: string[]
+  evidence_completeness_score: number
+  provenance: Record<string, any> | string
+  created_at: string
+}
+
+export interface FindingCluster {
+  cluster_id: string
+  workflow_id: string
+  cluster_name: string
+  primary_finding_id: number
+  thematic_category: string
+  correlation_rationale: string
+  confidence_score: number
+  is_manually_adjusted: boolean
+  finding_ids: number[]
+  created_at: string
+}
+
+export interface RemediationPlan {
+  plan_id: string
+  workflow_id: string
+  strategy_name: string
+  strategy_description?: string
+  target_findings: number[]
+  affected_files: string[]
+  root_cause_reference: Record<string, any>
+  proposed_changes_summary: string
+  regression_risks: string[]
+  required_tests: Array<{
+    test_id: string
+    test_name: string
+    file_path: string
+    tier: string
+    confidence: number
+    reason: string
+    classification?: string
+  }>
+  rollback_strategy: string
+  risk_assessment: {
+    blast_radius_score?: number
+    risk_level?: string
+    affected_modules?: string[]
+    predictive_risk_distribution?: Record<string, number>
+    candidate_patch_preview?: string
+    scoring_weights_used?: Record<string, number>
+  }
+  plan_score: number
+  score_breakdown: Record<string, number>
+  ranking_explanation?: string
+  approval_tier_required: string
+  estimated_complexity: string
+  is_preferred: boolean
+  abstain_reason?: string | null
+  created_at: string
+}
+
+export interface PlanComparisonMatrix {
+  workflow_id: string
+  plans_count: number
+  comparison_matrix: Array<{
+    plan_id: string
+    strategy_name: string
+    score: number
+    is_preferred: boolean
+    complexity: string
+    approval_tier: string
+    blast_radius_score: number
+    affected_modules_count: number
+    required_tests_count: number
+    abstained: boolean
+    abstain_reason?: string | null
+    score_breakdown: Record<string, number>
+  }>
+}
+
+export async function triggerRootCauseInvestigation(
+  projectId: number | string,
+  workflowId: string
+): Promise<{ status: string; hypotheses_count: number; clusters_count: number }> {
+  return request<{ status: string; hypotheses_count: number; clusters_count: number }>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/investigate`,
+    { method: 'POST' }
+  )
+}
+
+export async function fetchInvestigationDetails(
+  projectId: number | string,
+  workflowId: string
+): Promise<{
+  workflow_id: string
+  workflow_state: string
+  hypotheses: RemediationHypothesis[]
+  clusters: FindingCluster[]
+}> {
+  return request<{
+    workflow_id: string
+    workflow_state: string
+    hypotheses: RemediationHypothesis[]
+    clusters: FindingCluster[]
+  }>(`/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/investigation`)
+}
+
+export async function fetchHypotheses(
+  projectId: number | string,
+  workflowId: string
+): Promise<RemediationHypothesis[]> {
+  return request<RemediationHypothesis[]>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/hypotheses`
+  )
+}
+
+export async function fetchClusters(
+  projectId: number | string,
+  workflowId: string
+): Promise<FindingCluster[]> {
+  return request<FindingCluster[]>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/clusters`
+  )
+}
+
+export async function separateFindingFromCluster(
+  projectId: number | string,
+  workflowId: string,
+  clusterId: string,
+  findingId: number,
+  reason: string
+): Promise<any> {
+  return request(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/clusters/${encodeURIComponent(clusterId)}/separate-finding`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ finding_id: findingId, reason }),
+    }
+  )
+}
+
+export async function generateRemediationPlans(
+  projectId: number | string,
+  workflowId: string
+): Promise<RemediationPlan[]> {
+  return request<RemediationPlan[]>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/generate-plans`,
+    { method: 'POST' }
+  )
+}
+
+export async function fetchRemediationPlans(
+  projectId: number | string,
+  workflowId: string
+): Promise<RemediationPlan[]> {
+  return request<RemediationPlan[]>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/plans`
+  )
+}
+
+export async function fetchRemediationPlan(
+  projectId: number | string,
+  workflowId: string,
+  planId: string
+): Promise<RemediationPlan> {
+  return request<RemediationPlan>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/plans/${encodeURIComponent(planId)}`
+  )
+}
+
+export async function selectPreferredPlan(
+  projectId: number | string,
+  workflowId: string,
+  planId: string
+): Promise<{ status: string; plan_id: string; strategy_name: string; workflow_state: string; active_candidate_id: string }> {
+  return request(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/plans/${encodeURIComponent(planId)}/select`,
+    { method: 'POST' }
+  )
+}
+
+export async function compareRemediationPlans(
+  projectId: number | string,
+  workflowId: string
+): Promise<PlanComparisonMatrix> {
+  return request<PlanComparisonMatrix>(
+    `/projects/${projectId}/remediation/workflows/${encodeURIComponent(workflowId)}/plans/compare`
+  )
+}

@@ -247,7 +247,7 @@ describe('live project review page', () => {
 
     const nav = screen.getByRole('navigation', { name: 'Project review categories' })
     expect(within(nav).getAllByRole('button').map(button => button.textContent)).toEqual([
-      'Overview', 'Changes', 'Problems', 'Fixed', 'Requirements', 'Next steps', 'Failure intelligence',
+      'Overview', 'Changes', 'Problems', 'Fixed', 'Requirements', 'Next steps', 'Failure intelligence', 'Remediation & Planning',
     ])
 
     selectCategory('Problems')
